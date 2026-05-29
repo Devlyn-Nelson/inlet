@@ -1,0 +1,3 @@
+- make it so combos are interrupted by other inputs.
+- It would be nice to remove `dyn` stuff.
+- It would be nice to not need `Box` for some stuff.
