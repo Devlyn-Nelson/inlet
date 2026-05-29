@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use inlet::{
     InputBindingsSimple, InputManagementPluginSimple,
-    axis::{AxisBinding, NegativeOnly, PositiveOnly},
+    axis::{AxisBinding, AxisModifier},
     button::{ButtonChord, ButtonCombo},
 };
 
@@ -96,16 +96,16 @@ fn setup(
                     // Up -> Down -> Right -> Left on joystick
                     ButtonCombo::new(vec![
                         AxisBinding::gamepad_left_stick_y()
-                            .with_modifier(Box::new(PositiveOnly))
+                            .with_modifier(AxisModifier::POSITIVE_ONLY)
                             .into(),
                         AxisBinding::gamepad_left_stick_y()
-                            .with_modifier(Box::new(NegativeOnly))
+                            .with_modifier(AxisModifier::NEGATIVE_ONLY)
                             .into(),
                         AxisBinding::gamepad_left_stick_x()
-                            .with_modifier(Box::new(PositiveOnly))
+                            .with_modifier(AxisModifier::POSITIVE_ONLY)
                             .into(),
                         AxisBinding::gamepad_left_stick_x()
-                            .with_modifier(Box::new(NegativeOnly))
+                            .with_modifier(AxisModifier::NEGATIVE_ONLY)
                             .into(),
                     ])
                     .into(),

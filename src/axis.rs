@@ -12,17 +12,17 @@ use crate::button::{ButtonBinding, ButtonState};
 
 #[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Debug, Clone, PartialEq)]
-pub enum Modifier {
+pub enum AxisModifier {
     Simple(fn(f32) -> f32),
     /// I assume the second f32 parameter is the config and the first is the val that is getting modified.
     Configurable(fn(f32, f32) -> f32, f32),
 }
 
-impl Modifier {
+impl AxisModifier {
     pub fn do_thing(&self, val: f32) -> f32 {
         match self {
-            Modifier::Simple(f) => f(val),
-            Modifier::Configurable(f, config) => f(val, *config),
+            AxisModifier::Simple(f) => f(val),
+            AxisModifier::Configurable(f, config) => f(val, *config),
         }
     }
     pub const INVERT: Self = Self::Simple(axis_mod_invert);
@@ -63,7 +63,7 @@ pub fn axis_mod_add(value: f32, config: f32) -> f32 {
     value + config
 }
 
-impl Eq for Modifier {}
+impl Eq for AxisModifier {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AxisBindingButton {
@@ -188,7 +188,7 @@ impl Ord for AxisBindingKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AxisBinding {
     kind: AxisBindingKind,
-    mod_stack: Vec<Modifier>,
+    mod_stack: Vec<AxisModifier>,
 }
 
 impl PartialOrd for AxisBinding {
@@ -204,10 +204,10 @@ impl Ord for AxisBinding {
 }
 
 impl AxisBinding {
-    pub fn mods(&self) -> &[Modifier] {
+    pub fn mods(&self) -> &[AxisModifier] {
         &self.mod_stack
     }
-    pub fn with_modifier(mut self, m: Modifier) -> Self {
+    pub fn with_modifier(mut self, m: AxisModifier) -> Self {
         self.mod_stack.push(m);
         self
     }
@@ -314,7 +314,7 @@ impl AxisBinding {
         AxisBindingKind::Mouse(axis).into()
     }
     pub fn invert(self) -> Self {
-        self.with_modifier(Modifier::INVERT.clone())
+        self.with_modifier(AxisModifier::INVERT.clone())
     }
 }
 
@@ -367,7 +367,7 @@ impl From<(ButtonBinding, ButtonBinding)> for AxisBinding {
 
 pub struct ValueBinding<T> {
     bindings: Vec<AxisBinding>,
-    mod_stack: Vec<Modifier>,
+    mod_stack: Vec<AxisModifier>,
     event: fn(f32) -> Option<T>,
     /// The last value feed into this binding.
     state: f32,
@@ -401,7 +401,7 @@ impl<T> ValueBinding<T> {
     }
     pub fn from_parts(
         bindings: Vec<AxisBinding>,
-        mod_stack: Vec<Modifier>,
+        mod_stack: Vec<AxisModifier>,
         event: fn(f32) -> Option<T>,
     ) -> Self {
         Self {
@@ -434,7 +434,7 @@ impl<T> ValueBinding<T> {
         self.event = event;
         self
     }
-    pub fn with_modifier(mut self, modifier: Modifier) -> Self {
+    pub fn with_modifier(mut self, modifier: AxisModifier) -> Self {
         self.mod_stack.push(modifier);
         self
     }
@@ -476,9 +476,9 @@ fn no_event<T>(_: f32) -> Option<T> {
 
 pub struct DualValueBinding<T> {
     x_bindings: Vec<AxisBinding>,
-    x_mod_stack: Vec<Modifier>,
+    x_mod_stack: Vec<AxisModifier>,
     y_bindings: Vec<AxisBinding>,
-    y_mod_stack: Vec<Modifier>,
+    y_mod_stack: Vec<AxisModifier>,
     event: fn(Vec2) -> Option<T>,
     state: Vec2,
     /// Last instant that the value transitioned from zero to a non-zero value or a non-zero value to zero.
@@ -521,11 +521,11 @@ impl<T> DualValueBinding<T> {
         }
         v
     }
-    pub fn with_x_modifier(mut self, modifier: Modifier) -> Self {
+    pub fn with_x_modifier(mut self, modifier: AxisModifier) -> Self {
         self.x_mod_stack.push(modifier);
         self
     }
-    pub fn with_y_modifier(mut self, modifier: Modifier) -> Self {
+    pub fn with_y_modifier(mut self, modifier: AxisModifier) -> Self {
         self.y_mod_stack.push(modifier);
         self
     }
