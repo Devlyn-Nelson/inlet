@@ -204,8 +204,6 @@ fn accept_events(
 
 Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system to your bevy app.
 
-## Bindings
-
 # In Progress
 
 - [ ] Combos currently don't reset on an invalid input between inputs.
