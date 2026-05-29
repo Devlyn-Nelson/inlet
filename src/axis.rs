@@ -26,6 +26,17 @@ impl Modifier {
         }
     }
     pub const INVERT: Self = Self::Simple(axis_mod_invert);
+    pub const POSITIVE_ONLY: Self = Self::Simple(axis_mod_positive_only);
+    pub const NEGATIVE_ONLY: Self = Self::Simple(axis_mod_negative_only);
+    pub fn sensitivity(config: f32) -> Self {
+        Self::Configurable(axis_mod_sensitivity, config)
+    }
+    pub fn dead_zone(config: f32) -> Self {
+        Self::Configurable(axis_mod_dead_zone, config)
+    }
+    pub fn add(config: f32) -> Self {
+        Self::Configurable(axis_mod_add, config)
+    }
 }
 
 pub fn axis_mod_invert(val: f32) -> f32 {
