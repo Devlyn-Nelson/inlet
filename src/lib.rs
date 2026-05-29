@@ -1,5 +1,6 @@
 pub mod axis;
 pub mod button;
+pub mod clash;
 mod plugins;
 mod systems;
 
@@ -135,33 +136,6 @@ impl<T> InputBinding<T> {
         }
     }
 }
-
-pub struct Clash {}
-
-pub enum ClashReport {
-    Capture,
-    Ignore,
-    None,
-}
-
-// pub struct ClashHandler<K> {
-//     // clashes:
-// }
-
-// impl<K> ClashHandler<K> {
-//     /// Called when a new binding been inserted.
-//     pub fn update_register(&mut self, key: &K) {
-//         todo!();
-//     }
-//     /// Called when a change has been applied to a binding.
-//     pub fn update_change(&mut self, key: &K, bindings: &HashMap<K, InputBinding<T>>) {
-//         todo!();
-//     }
-//     /// checks for a clash possibility.
-//     pub fn has_clash(&self, key: &K) -> ClashReport {
-//         todo!();
-//     }
-// }
 
 #[derive(Component)]
 pub struct InputBindings<K, T: BindEvent> {

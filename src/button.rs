@@ -7,8 +7,28 @@ use bevy::{
 
 use crate::axis::AxisBinding;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonChord {
     actions: Vec<ButtonBinding>,
+}
+
+impl Ord for ButtonChord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let len = self.actions.len().min(other.actions.len());
+        for i in 0..len {
+            let cmp = self.actions[i].cmp(&other.actions[i]);
+            if matches!(cmp, std::cmp::Ordering::Greater | std::cmp::Ordering::Less) {
+                return cmp;
+            }
+        }
+        std::cmp::Ordering::Equal
+    }
+}
+
+impl PartialOrd for ButtonChord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl ButtonChord {
@@ -24,11 +44,31 @@ impl ButtonChord {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonCombo {
     actions: Vec<ButtonBinding>,
     current_index: usize,
     last_hit: Instant,
     tolerance: Duration,
+}
+
+impl Ord for ButtonCombo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let len = self.actions.len().min(other.actions.len());
+        for i in 0..len {
+            let cmp = self.actions[i].cmp(&other.actions[i]);
+            if matches!(cmp, std::cmp::Ordering::Greater | std::cmp::Ordering::Less) {
+                return cmp;
+            }
+        }
+        std::cmp::Ordering::Equal
+    }
+}
+
+impl PartialOrd for ButtonCombo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl ButtonCombo {
@@ -75,13 +115,90 @@ impl ButtonCombo {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ButtonBinding {
-    Gamepad(GamepadButton),
+    Chord(ButtonChord),
+    Combo(ButtonCombo),
     Keyboard(KeyCode),
     Mouse(MouseButton),
-    Combo(ButtonCombo),
-    Chord(ButtonChord),
+    Gamepad(GamepadButton),
     Axis(Box<AxisBinding>),
+}
+
+impl PartialOrd for ButtonBinding {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn mouse_index(b: &MouseButton) -> u8{
+    match b {
+        MouseButton::Left => 0,
+        MouseButton::Right => 1,
+        MouseButton::Middle => 2,
+        MouseButton::Back => 3,
+        MouseButton::Forward => 4,
+        MouseButton::Other(_) => 5,
+    }
+}
+
+impl Ord for ButtonBinding {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self {
+            ButtonBinding::Chord(button_chord) => match other {
+                ButtonBinding::Chord(other_button_chord) => button_chord.cmp(other_button_chord),
+                ButtonBinding::Combo(_) |
+                ButtonBinding::Keyboard(_) |
+                ButtonBinding::Mouse(_) |
+                ButtonBinding::Gamepad(_) |
+                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+            },
+            ButtonBinding::Combo(button_combo) => match other {
+                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Combo(other_button_combo) => button_combo.cmp(other_button_combo),
+                ButtonBinding::Keyboard(_) |
+                ButtonBinding::Mouse(_) |
+                ButtonBinding::Gamepad(_) |
+                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+            },
+            ButtonBinding::Keyboard(asdf) => match other {
+                ButtonBinding::Combo(_) |
+                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Keyboard(o_asdf) => asdf.cmp(o_asdf),
+                ButtonBinding::Mouse(_) |
+                ButtonBinding::Gamepad(_) |
+                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+            },
+            ButtonBinding::Mouse(asdf) => match other {
+                ButtonBinding::Keyboard(_) |
+                ButtonBinding::Combo(_) |
+                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Mouse(o_asdf) => if let MouseButton::Other(one) = asdf && let MouseButton::Other(two) = o_asdf {
+                    one.cmp(two)
+                }else{
+                    mouse_index(asdf).cmp(&mouse_index(o_asdf))
+                },
+                ButtonBinding::Gamepad(_) |
+                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+            },
+            ButtonBinding::Gamepad(asdf) => match other {
+                ButtonBinding::Mouse(_) |
+                ButtonBinding::Keyboard(_) |
+                ButtonBinding::Combo(_) |
+                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Gamepad(o_asdf) => asdf.cmp(o_asdf),
+                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+            },
+            ButtonBinding::Axis(asdf) => match other {
+                ButtonBinding::Gamepad(_) |
+                ButtonBinding::Mouse(_) |
+                ButtonBinding::Keyboard(_) |
+                ButtonBinding::Combo(_) |
+                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Axis(o_asdf) => asdf.cmp(o_asdf),
+            },
+        }
+    }
 }
 
 impl From<KeyCode> for ButtonBinding {
@@ -202,15 +319,6 @@ pub enum ActionableState {
     Pressed,
     /// Button was `Self::Pressed | Self::JustPressed` before this frame but is no longer pressed.
     JustReleased,
-    /// Button is was pressed this frame but a higher priority input captured it, meaning we want to ignore
-    /// that is is still pressed until the button is released and pressed again.
-    CapturedJustPressed,
-    /// Button is still pressed but the input was captured, meaning we want to ignore that is is still pressed
-    /// until the button is released and pressed again.
-    CapturedPressed,
-    /// Button was `Self::CapturedPressed | Self::CapturedJustPressed` before this frame but is no longer
-    /// pressed. but the input was captured
-    CapturedJustReleased,
 }
 
 impl ActionableState {
@@ -219,7 +327,6 @@ impl ActionableState {
         if pressed {
             match self {
                 ActionableState::Released
-                | ActionableState::CapturedJustReleased
                 | ActionableState::JustReleased => {
                     *self = ActionableState::JustPressed;
                     ActionableStateTick::Transitioned
@@ -228,23 +335,17 @@ impl ActionableState {
                     *self = ActionableState::Pressed;
                     ActionableStateTick::Changed
                 }
-                ActionableState::CapturedJustPressed => {
-                    *self = ActionableState::CapturedPressed;
-                    ActionableStateTick::Changed
-                }
                 _ => ActionableStateTick::None,
             }
         } else {
             match self {
                 ActionableState::Pressed
-                | ActionableState::JustPressed
-                | ActionableState::CapturedJustPressed
-                | ActionableState::CapturedPressed => {
+                | ActionableState::JustPressed => {
                     *self = ActionableState::JustReleased;
                     ActionableStateTick::Transitioned
                 }
                 ActionableState::Released => ActionableStateTick::None,
-                ActionableState::JustReleased | ActionableState::CapturedJustReleased => {
+                ActionableState::JustReleased => {
                     *self = ActionableState::Released;
                     ActionableStateTick::Changed
                 }
@@ -254,7 +355,7 @@ impl ActionableState {
     pub fn is_released(&self) -> bool {
         matches!(
             self,
-            Self::JustReleased | Self::Released | Self::CapturedPressed
+            Self::JustReleased | Self::Released
         )
     }
     pub fn is_pressed(&self) -> bool {
@@ -265,22 +366,6 @@ impl ActionableState {
     }
     pub fn was_pressed(&self) -> bool {
         matches!(self, Self::JustPressed)
-    }
-    pub fn capture_just_press(&mut self) -> bool {
-        if matches!(self, Self::JustPressed) {
-            *self = Self::CapturedJustPressed;
-            true
-        } else {
-            false
-        }
-    }
-    pub fn capture_press(&mut self) -> bool {
-        if matches!(self, Self::Pressed) {
-            *self = Self::CapturedPressed;
-            true
-        } else {
-            false
-        }
     }
 }
 

@@ -10,62 +10,66 @@ use bevy::{
 
 use crate::button::{ButtonBinding, ButtonState};
 
-pub trait AxisModifier: Send + Sync {
-    fn do_thing(&self, value: f32) -> f32;
+#[allow(unpredictable_function_pointer_comparisons)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum Modifier {
+    Simple(fn(f32) -> f32),
+    /// I assume the second f32 parameter is the config and the first is the val that is getting modified.
+    Configurable(fn(f32, f32) -> f32, f32),
 }
 
-pub struct PositiveOnly;
-
-impl AxisModifier for PositiveOnly {
-    fn do_thing(&self, value: f32) -> f32 {
-        if value < 0. { 0. } else { value }
+impl Modifier {
+    pub fn do_thing(&self, val: f32) -> f32 {
+        match self {
+            Modifier::Simple(f) => f(val),
+            Modifier::Configurable(f, config) => f(val, *config),
+        }
     }
+    pub const INVERT: Self = Self::Simple(axis_mod_invert);
 }
 
-pub struct NegativeOnly;
-
-impl AxisModifier for NegativeOnly {
-    fn do_thing(&self, value: f32) -> f32 {
-        if value > 0. { 0. } else { value }
-    }
+pub fn axis_mod_invert(val: f32) -> f32 {
+    -val
 }
 
-pub struct Invert;
-
-impl AxisModifier for Invert {
-    fn do_thing(&self, value: f32) -> f32 {
-        -value
-    }
+pub fn axis_mod_positive_only(value: f32) -> f32 {
+    if value < 0. { 0. } else { value }
 }
 
-pub struct Sensitivity(f32);
-
-impl AxisModifier for Sensitivity {
-    fn do_thing(&self, value: f32) -> f32 {
-        value * self.0
-    }
+pub fn axis_mod_negative_only(value: f32) -> f32 {
+    if value > 0. { 0. } else { value }
 }
 
-pub struct DeadZone(f32);
-
-impl AxisModifier for DeadZone {
-    fn do_thing(&self, value: f32) -> f32 {
-        if value < self.0 { 0. } else { value }
-    }
+pub fn axis_mod_sensitivity(value: f32, config: f32) -> f32 {
+    value * config
 }
 
-/// Its a Axis but we add a number to it.
-pub struct Shift(f32);
-
-impl AxisModifier for Shift {
-    fn do_thing(&self, value: f32) -> f32 {
-        value + self.0
-    }
+pub fn axis_mod_dead_zone(value: f32, config: f32) -> f32 {
+    if value < config { 0. } else { value }
 }
 
+pub fn axis_mod_add(value: f32, config: f32) -> f32 {
+    value + config
+}
+
+impl Eq for Modifier {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AxisBindingButton {
     pub binding: ButtonBinding,
     pub state: ButtonState,
+}
+
+impl PartialOrd for AxisBindingButton {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.binding.partial_cmp(&other.binding)
+    }
+}
+
+impl Ord for AxisBindingButton {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.binding.cmp(&other.binding)
+    }
 }
 
 impl From<ButtonBinding> for AxisBindingButton {
@@ -77,7 +81,7 @@ impl From<ButtonBinding> for AxisBindingButton {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MouseAxis {
     MotionX,
     MotionY,
@@ -85,6 +89,7 @@ pub enum MouseAxis {
     ScrollY,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AxisBindingKind {
     Mouse(MouseAxis),
     GamepadAxis(GamepadAxis),
@@ -95,16 +100,103 @@ pub enum AxisBindingKind {
     },
 }
 
+// impl AxisBindingKind {
+//     fn index(&self) -> u8 {
+//         match self {
+//             AxisBindingKind::Mouse(mouse_axis) => 0,
+//             AxisBindingKind::GamepadAxis(gamepad_axis) => 1,
+//             AxisBindingKind::GamepadButton(gamepad_button) => todo!(),
+//             AxisBindingKind::Buttons { plus, minus } => todo!(),
+//         }
+//     }
+// }
+
+fn stick_index(axis: &GamepadAxis) -> u8 {
+    match axis {
+        GamepadAxis::LeftStickX => 0,
+        GamepadAxis::LeftStickY => 1,
+        GamepadAxis::LeftZ => 2,
+        GamepadAxis::RightStickX => 3,
+        GamepadAxis::RightStickY => 4,
+        GamepadAxis::RightZ => 5,
+        GamepadAxis::Other(_) => 6,
+    }
+}
+impl PartialOrd for AxisBindingKind {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for AxisBindingKind {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self {
+            AxisBindingKind::Mouse(mouse_axis) => match other {
+                AxisBindingKind::Mouse(other_mouse_axis) => mouse_axis.cmp(other_mouse_axis),
+                AxisBindingKind::GamepadAxis(_) |
+                AxisBindingKind::GamepadButton(_) |
+                AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
+            },
+            AxisBindingKind::GamepadAxis(gamepad_axis) => match other {
+                AxisBindingKind::Mouse(_) => std::cmp::Ordering::Greater,
+                AxisBindingKind::GamepadAxis(other_gamepad_axis) => match gamepad_axis {
+                    GamepadAxis::Other(custom_axis) => if let GamepadAxis::Other(other_custom_axis) = other_gamepad_axis {
+                        custom_axis.cmp(other_custom_axis)
+                    }else{
+                        std::cmp::Ordering::Greater
+                    },
+                    _ => {
+                        stick_index(gamepad_axis).cmp(&stick_index(other_gamepad_axis))
+                    }
+                },
+                AxisBindingKind::GamepadButton(_) |
+                AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
+            },
+            AxisBindingKind::GamepadButton(gamepad_button) => match other {
+                AxisBindingKind::Mouse(_) |
+                AxisBindingKind::GamepadAxis(_) => std::cmp::Ordering::Greater,
+                AxisBindingKind::GamepadButton(other_gamepad_button) => gamepad_button.cmp(other_gamepad_button),
+                AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
+            },
+            AxisBindingKind::Buttons { plus, minus } => match other {
+                AxisBindingKind::Mouse(_) |
+                AxisBindingKind::GamepadAxis(_) |
+                AxisBindingKind::GamepadButton(_) => std::cmp::Ordering::Greater,
+                AxisBindingKind::Buttons { plus: other_plus, minus: other_minus } => {
+                    let p = plus.cmp(other_plus);
+                    if matches!(p, std::cmp::Ordering::Equal) {
+                        minus.cmp(other_minus)
+                    }else{
+                        p
+                    }
+                }
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AxisBinding {
     kind: AxisBindingKind,
-    mod_stack: Vec<Box<dyn AxisModifier>>,
+    mod_stack: Vec<Modifier>,
+}
+
+impl PartialOrd for AxisBinding {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.kind.partial_cmp(&other.kind)
+    }
+}
+
+impl Ord for AxisBinding {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.kind.cmp(&other.kind)
+    }
 }
 
 impl AxisBinding {
-    pub fn mods(&self) -> &[Box<dyn AxisModifier>] {
+    pub fn mods(&self) -> &[Modifier] {
         &self.mod_stack
     }
-    pub fn with_modifier(mut self, m: Box<dyn AxisModifier>) -> Self {
+    pub fn with_modifier(mut self, m: Modifier) -> Self {
         self.mod_stack.push(m);
         self
     }
@@ -211,7 +303,7 @@ impl AxisBinding {
         AxisBindingKind::Mouse(axis).into()
     }
     pub fn invert(self) -> Self {
-        self.with_modifier(Box::new(Invert))
+        self.with_modifier(Modifier::INVERT.clone())
     }
 }
 
@@ -264,7 +356,7 @@ impl From<(ButtonBinding, ButtonBinding)> for AxisBinding {
 
 pub struct ValueBinding<T> {
     bindings: Vec<AxisBinding>,
-    mod_stack: Vec<Box<dyn AxisModifier>>,
+    mod_stack: Vec<Modifier>,
     event: fn(f32) -> Option<T>,
     /// The last value feed into this binding.
     state: f32,
@@ -298,7 +390,7 @@ impl<T> ValueBinding<T> {
     }
     pub fn from_parts(
         bindings: Vec<AxisBinding>,
-        mod_stack: Vec<Box<dyn AxisModifier>>,
+        mod_stack: Vec<Modifier>,
         event: fn(f32) -> Option<T>,
     ) -> Self {
         Self {
@@ -331,7 +423,7 @@ impl<T> ValueBinding<T> {
         self.event = event;
         self
     }
-    pub fn with_modifier(mut self, modifier: Box<dyn AxisModifier>) -> Self {
+    pub fn with_modifier(mut self, modifier: Modifier) -> Self {
         self.mod_stack.push(modifier);
         self
     }
@@ -373,9 +465,9 @@ fn no_event<T>(_: f32) -> Option<T> {
 
 pub struct DualValueBinding<T> {
     x_bindings: Vec<AxisBinding>,
-    x_mod_stack: Vec<Box<dyn AxisModifier>>,
+    x_mod_stack: Vec<Modifier>,
     y_bindings: Vec<AxisBinding>,
-    y_mod_stack: Vec<Box<dyn AxisModifier>>,
+    y_mod_stack: Vec<Modifier>,
     event: fn(Vec2) -> Option<T>,
     state: Vec2,
     /// Last instant that the value transitioned from zero to a non-zero value or a non-zero value to zero.
@@ -418,11 +510,11 @@ impl<T> DualValueBinding<T> {
         }
         v
     }
-    pub fn with_x_modifier(mut self, modifier: Box<dyn AxisModifier>) -> Self {
+    pub fn with_x_modifier(mut self, modifier: Modifier) -> Self {
         self.x_mod_stack.push(modifier);
         self
     }
-    pub fn with_y_modifier(mut self, modifier: Box<dyn AxisModifier>) -> Self {
+    pub fn with_y_modifier(mut self, modifier: Modifier) -> Self {
         self.y_mod_stack.push(modifier);
         self
     }
