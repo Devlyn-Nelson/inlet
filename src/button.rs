@@ -282,7 +282,7 @@ impl ButtonState {
     }
     /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
     /// is greater than or equal to `duration`.
-    /// 
+    ///
     /// Note that a state of `JustPressed` will always return `false`.
     pub fn held_for(&self, duration: &Duration) -> bool {
         matches!(self.ty, ActionableState::Pressed) && self.start.elapsed() >= *duration
@@ -336,7 +336,6 @@ impl Default for ButtonState {
     }
 }
 
-
 /// Describes if the state of a [`ActionableState`] changed and how.
 pub enum ActionableStateTick {
     /// No change
@@ -363,7 +362,7 @@ pub enum ActionableState {
 
 impl ActionableState {
     /// Updates `self` to appropriate state using `pressed` to drive the simple state of the input.
-    /// 
+    ///
     /// if:
     ///   - `pressed == true && self.is_pressed && !self.is_just_pressed` => No Change.
     ///   - `pressed == true && self.is_just_pressed` => Change to `ActionableState::Pressed`.
@@ -443,7 +442,7 @@ impl<T> ActionBinding<T> {
     }
     /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
     /// is greater than or equal to `duration`.
-    /// 
+    ///
     /// Note that a state of `JustPressed` will always return `false`.
     #[inline]
     pub fn held_for(&self, duration: &Duration) -> bool {
@@ -490,7 +489,7 @@ impl<T> ActionBinding<T> {
         &self.state
     }
 
-    /// Feeds the state of the binding. 
+    /// Feeds the state of the binding.
     pub fn feed(&mut self, pressed: bool) -> bool {
         self.state.feed(pressed)
     }
@@ -594,7 +593,7 @@ impl<T> ButtonEventBinding<T> {
                         *activated = true;
                         return Some(event());
                     }
-                }else if *activated{
+                } else if *activated {
                     *activated = false;
                 }
             }

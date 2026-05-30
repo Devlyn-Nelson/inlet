@@ -18,7 +18,7 @@ pub enum AxisModifier {
     /// the f32 stored will get passed into the second param of your function.
     Configurable(fn(f32, f32) -> f32, f32),
     /// the f32's stored will get passed into the second and third param of your function.
-    DoubleConfigurable(fn(f32, f32, f32,) -> f32, f32, f32),
+    DoubleConfigurable(fn(f32, f32, f32) -> f32, f32, f32),
 }
 
 impl AxisModifier {
@@ -74,7 +74,11 @@ pub fn axis_mod_dead_zone(value: f32, config: f32) -> f32 {
 }
 
 pub fn axis_mod_window(value: f32, one: f32, two: f32) -> f32 {
-    if value >= one && value <= two  { value } else { 0. }
+    if value >= one && value <= two {
+        value
+    } else {
+        0.
+    }
 }
 
 pub fn axis_mod_add(value: f32, config: f32) -> f32 {
