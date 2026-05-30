@@ -7,6 +7,7 @@ use bevy::{
 
 use crate::axis::AxisBinding;
 
+/// A set of buttons that must all be pressed at once to be considered active.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonChord {
     actions: Vec<ButtonBinding>,
@@ -38,12 +39,12 @@ impl ButtonChord {
     pub fn bindings_mut(&mut self) -> &mut [ButtonBinding] {
         &mut self.actions
     }
-    /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
     pub fn new(bindings: Vec<ButtonBinding>) -> Self {
         Self { actions: bindings }
     }
 }
 
+/// A set of buttons that must all be pressed one after another to become active.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonCombo {
     actions: Vec<ButtonBinding>,
@@ -72,6 +73,15 @@ impl PartialOrd for ButtonCombo {
 }
 
 impl ButtonCombo {
+    /// Creates a new button combo bindings.
+    pub fn from_tolerance(bindings: Vec<ButtonBinding>, tolerance: Duration) -> Self {
+        ButtonCombo {
+            actions: bindings,
+            current_index: 0,
+            last_hit: Instant::now(),
+            tolerance,
+        }
+    }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
     pub fn new(bindings: Vec<ButtonBinding>) -> Self {
         ButtonCombo {
@@ -117,11 +127,17 @@ impl ButtonCombo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ButtonBinding {
+    /// A set of [`ButtonBinding`] that must all be active at once to be active.
     Chord(ButtonChord),
+    /// A set of [`ButtonBinding`] that must be pressed one after another to become active.
     Combo(ButtonCombo),
+    /// A [`KeyCode`] that will be checked from `bevy_input`.
     Keyboard(KeyCode),
+    /// A [`MouseButton`] that will be checked from `bevy_input`.
     Mouse(MouseButton),
+    /// A [`GamepadButton`] that will be checked from `bevy_input`.
     Gamepad(GamepadButton),
+    /// An [`AxisBinding`] that will be interpreted as a button. A value of 0 is Released otherwise it is Pressed.
     Axis(Box<AxisBinding>),
 }
 
@@ -239,6 +255,8 @@ impl From<AxisBinding> for ButtonBinding {
     }
 }
 
+/// A stored [`ActionableState`] and the [`Instant`] of [`Self::feed`] changed the state to
+/// [`ActionableState::JustPressed`] or [`ActionableState::JustReleased`].
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
 pub struct ButtonState {
     pub(crate) ty: ActionableState,
@@ -246,25 +264,36 @@ pub struct ButtonState {
 }
 
 impl ButtonState {
+    /// The amount of time passed between the last time the internal state
+    /// was changed to [`ActionableState::JustPressed`] or [`ActionableState::JustReleased`].
+    pub fn last_transition(&self) -> Duration {
+        self.start.elapsed()
+    }
+    /// Returns `true` if the internal [`ActionableState`] is `JustPressed`.
     pub fn just_pressed(&self) -> bool {
         matches!(self.ty, ActionableState::JustPressed)
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustPressed` or `Pressed`.
     pub fn pressed(&self) -> bool {
         matches!(
             self.ty,
             ActionableState::Pressed | ActionableState::JustPressed
         )
     }
-    pub fn held_until(&self, duration: &Duration) -> bool {
-        matches!(self.ty, ActionableState::Pressed) && self.start.elapsed() < *duration
-    }
+    /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
+    /// is greater than or equal to `duration`.
+    /// 
+    /// Note that a state of `JustPressed` will always return `false`.
     pub fn held_for(&self, duration: &Duration) -> bool {
         matches!(self.ty, ActionableState::Pressed) && self.start.elapsed() >= *duration
     }
+    /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
+    /// is greater than or equal to `start` and less than `stop`.
     pub fn held_range(&self, start: &Duration, stop: &Duration) -> bool {
         let elapsed = self.start.elapsed();
         matches!(self.ty, ActionableState::Pressed) && elapsed >= *start && elapsed < *stop
     }
+    /// Returns time elapsed for a pressed state or `None`.
     pub fn try_get_held_duration(&self) -> Option<Duration> {
         if matches!(self.ty, ActionableState::Pressed) {
             Some(self.start.elapsed())
@@ -272,9 +301,11 @@ impl ButtonState {
             None
         }
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustReleased`.
     pub fn just_released(&self) -> bool {
         matches!(self.ty, ActionableState::JustReleased)
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustReleased` or `Released`.
     pub fn released(&self) -> bool {
         matches!(
             self.ty,
@@ -287,7 +318,11 @@ impl ButtonState {
     pub fn feed(&mut self, pressed: bool) -> bool {
         match self.ty.tick(pressed) {
             ActionableStateTick::None => false,
-            ActionableStateTick::Changed | ActionableStateTick::Transitioned => true,
+            ActionableStateTick::Changed => true,
+            ActionableStateTick::Transitioned => {
+                self.start = Instant::now();
+                true
+            }
         }
     }
 }
@@ -301,6 +336,8 @@ impl Default for ButtonState {
     }
 }
 
+
+/// Describes if the state of a [`ActionableState`] changed and how.
 pub enum ActionableStateTick {
     /// No change
     None,
@@ -310,21 +347,30 @@ pub enum ActionableStateTick {
     Transitioned,
 }
 
+/// Describes the state of a button.
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, Default)]
 pub enum ActionableState {
-    /// Button is not being pressed
+    /// Button is not pressed.
     #[default]
     Released,
     /// Button was pressed this frame.
     JustPressed,
-    /// Button has been pressed for more than one frame but is not "held".
+    /// Button has been pressed for more than one frame.
     Pressed,
-    /// Button was `Self::Pressed | Self::JustPressed` before this frame but is no longer pressed.
+    /// Button was `Pressed` or `JustPressed` before this frame but is no longer pressed.
     JustReleased,
 }
 
 impl ActionableState {
-    /// Returns `true` when the state has transitioned between Pressed and Unpressed.
+    /// Updates `self` to appropriate state using `pressed` to drive the simple state of the input.
+    /// 
+    /// if:
+    ///   - `pressed == true && self.is_pressed && !self.is_just_pressed` => No Change.
+    ///   - `pressed == true && self.is_just_pressed` => Change to `ActionableState::Pressed`.
+    ///   - `pressed == true && self.is_released` => Transition to `ActionableState::JustPressed`.
+    ///   - `pressed == false && self.is_released && !self.is_just_release` => No Change.
+    ///   - `pressed == false && self.is_just_release` => Change to `ActionableState::Released`.
+    ///   - `pressed == false && self.is_pressed` => Transition to `ActionableState::JustReleased`.
     pub fn tick(&mut self, pressed: bool) -> ActionableStateTick {
         if pressed {
             match self {
@@ -371,6 +417,7 @@ impl ActionableState {
 // TODO Add some way to add conditions to the event activation for example should a event happen
 // `while_pressed`, `when_pressed`, `just_pressed`, `when_released`, `while_pressed_for`, `when_pressed_for`,
 // `while_pressed_between`, `when_pressed_between`.
+/// An Action or Button with an [`ActionableState`], one or many [`ButtonBinding`], and a [`ButtonEventBinding<T>`].
 pub struct ActionBinding<T> {
     bindings: Vec<ButtonBinding>,
     event: ButtonEventBinding<T>,
@@ -384,34 +431,41 @@ impl<T> ActionBinding<T> {
     pub fn bindings_mut(&mut self) -> &mut [ButtonBinding] {
         &mut self.bindings
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustPressed`.
     #[inline]
     pub fn just_pressed(&self) -> bool {
         self.state.just_pressed()
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustPressed` or `Pressed`.
     #[inline]
     pub fn pressed(&self) -> bool {
         self.state.pressed()
     }
-    #[inline]
-    pub fn held_until(&self, duration: &Duration) -> bool {
-        self.state.held_until(duration)
-    }
+    /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
+    /// is greater than or equal to `duration`.
+    /// 
+    /// Note that a state of `JustPressed` will always return `false`.
     #[inline]
     pub fn held_for(&self, duration: &Duration) -> bool {
         self.state.held_for(duration)
     }
+    /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
+    /// is greater than or equal to `start` and less than `stop`.
     #[inline]
     pub fn held_range(&self, start: &Duration, stop: &Duration) -> bool {
         self.state.held_range(start, stop)
     }
+    /// Returns time elapsed for a pressed state or `None`.
     #[inline]
     pub fn try_get_held_duration(&self) -> Option<Duration> {
         self.state.try_get_held_duration()
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustReleased`.
     #[inline]
     pub fn just_released(&self) -> bool {
         self.state.just_released()
     }
+    /// Returns `true` if the internal [`ActionableState`] is `JustReleased` or `Released`.
     #[inline]
     pub fn released(&self) -> bool {
         self.state.released()
@@ -430,14 +484,18 @@ impl<T> ActionBinding<T> {
             state: ButtonState::default(),
         }
     }
+
+    /// Returns a reference to the current state of the binding.
     pub fn state(&self) -> &ButtonState {
         &self.state
     }
 
+    /// Feeds the state of the binding. 
     pub fn feed(&mut self, pressed: bool) -> bool {
         self.state.feed(pressed)
     }
 
+    /// Feeds the state of the binding and returns a `T` if configured to do so for the current state.
     pub fn feed_event(&mut self, pressed: bool) -> Option<T> {
         if self.state.feed(pressed) {
             self.event.try_get_event(&self.state)
@@ -489,25 +547,36 @@ impl<T> From<(Vec<ButtonBinding>, ButtonEventBinding<T>)> for ActionBinding<T> {
     }
 }
 
+/// Conditionals for a [`ActionBinding`] to emit a [`Message`](bevy::prelude::Message).
 #[derive(Clone)]
 pub enum ButtonEventBinding<T> {
+    /// When the state transitions to `JustPressed`.
     WhenPressed(fn() -> T),
+    /// While the state is `Pressed`.
     WhilePressed(fn() -> T),
-    PressedUntil(Duration, fn() -> T),
-    PressedFor(Duration, fn() -> T),
+    /// When the state is `Pressed` for a duration.
+    WhenPressedFor(Duration, fn() -> T, bool),
+    /// While the state is `Pressed` for a duration.
+    WhilePressedFor(Duration, fn() -> T),
+    /// While the state is `Pressed` for a duration between `start` sand `stop`.
     PressedRange {
         start: Duration,
         end: Duration,
         event: fn() -> T,
     },
-    CapturePressDuration(fn(Duration) -> T),
+    /// Passes the [`Duration`] the state has been Pressed into your function allowing you to optionally return
+    /// a [`Message`] if you want it sent.
+    CapturePressDuration(fn(Duration) -> Option<T>),
+    /// When the state transitions to `JustReleased`.
     WhenReleased(fn() -> T),
+    /// While the state is `Released`.
     WhileReleased(fn() -> T),
+    /// Never send messages
     None,
 }
 
 impl<T> ButtonEventBinding<T> {
-    pub fn try_get_event(&self, state: &ButtonState) -> Option<T> {
+    pub fn try_get_event(&mut self, state: &ButtonState) -> Option<T> {
         match self {
             ButtonEventBinding::WhenPressed(event) => {
                 if state.just_pressed() {
@@ -519,12 +588,17 @@ impl<T> ButtonEventBinding<T> {
                     return Some(event());
                 }
             }
-            ButtonEventBinding::PressedUntil(duration, event) => {
-                if state.held_until(duration) {
-                    return Some(event());
+            ButtonEventBinding::WhenPressedFor(duration, event, activated) => {
+                if state.held_for(duration) {
+                    if !*activated {
+                        *activated = true;
+                        return Some(event());
+                    }
+                }else if *activated{
+                    *activated = false;
                 }
             }
-            ButtonEventBinding::PressedFor(duration, event) => {
+            ButtonEventBinding::WhilePressedFor(duration, event) => {
                 if state.held_for(duration) {
                     return Some(event());
                 }
@@ -536,7 +610,7 @@ impl<T> ButtonEventBinding<T> {
             }
             ButtonEventBinding::CapturePressDuration(event) => {
                 if let Some(dur) = state.try_get_held_duration() {
-                    return Some(event(dur));
+                    return event(dur);
                 }
             }
             ButtonEventBinding::WhenReleased(event) => {
@@ -568,16 +642,16 @@ impl<T> ButtonEventBinding<T> {
     pub fn while_released(event: fn() -> T) -> Self {
         Self::WhileReleased(event)
     }
-    pub fn pressed_until(event: fn() -> T, duration: Duration) -> Self {
-        Self::PressedUntil(duration, event)
+    pub fn when_pressed_for(event: fn() -> T, duration: Duration) -> Self {
+        Self::WhenPressedFor(duration, event, false)
     }
-    pub fn pressed_for(event: fn() -> T, duration: Duration) -> Self {
-        Self::PressedFor(duration, event)
+    pub fn while_pressed_for(event: fn() -> T, duration: Duration) -> Self {
+        Self::WhilePressedFor(duration, event)
     }
     pub fn pressed_range(event: fn() -> T, start: Duration, end: Duration) -> Self {
         Self::PressedRange { start, end, event }
     }
-    pub fn capture_press_duration(event: fn(Duration) -> T) -> Self {
+    pub fn capture_press_duration(event: fn(Duration) -> Option<T>) -> Self {
         Self::CapturePressDuration(event)
     }
 }

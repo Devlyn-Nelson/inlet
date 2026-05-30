@@ -10,12 +10,15 @@ use bevy::{
 
 use crate::button::{ButtonBinding, ButtonState};
 
+/// Allows you to customize the behavior of an axis.
 #[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum AxisModifier {
     Simple(fn(f32) -> f32),
-    /// I assume the second f32 parameter is the config and the first is the val that is getting modified.
+    /// the f32 stored will get passed into the second param of your function.
     Configurable(fn(f32, f32) -> f32, f32),
+    /// the f32's stored will get passed into the second and third param of your function.
+    DoubleConfigurable(fn(f32, f32, f32,) -> f32, f32, f32),
 }
 
 impl AxisModifier {
@@ -23,17 +26,28 @@ impl AxisModifier {
         match self {
             AxisModifier::Simple(f) => f(val),
             AxisModifier::Configurable(f, config) => f(val, *config),
+            AxisModifier::DoubleConfigurable(f, config, two) => f(val, *config, *two),
         }
     }
+    /// A modifier that inverts the sign of the input.
     pub const INVERT: Self = Self::Simple(axis_mod_invert);
+    /// A modifier that returns the input if it is positive but 0 when negative.
     pub const POSITIVE_ONLY: Self = Self::Simple(axis_mod_positive_only);
+    /// A modifier that returns the input if it is negative but 0 when positive.
     pub const NEGATIVE_ONLY: Self = Self::Simple(axis_mod_negative_only);
+    /// Returns a Modifier that multiplies the input by `config`.
     pub fn sensitivity(config: f32) -> Self {
         Self::Configurable(axis_mod_sensitivity, config)
     }
+    /// Returns a Modifier that returns 0. if the input is less than `config`.
     pub fn dead_zone(config: f32) -> Self {
         Self::Configurable(axis_mod_dead_zone, config)
     }
+    /// Returns a Modifier that returns 0. if the value is not `one <= input <= two`.
+    pub fn window(one: f32, two: f32) -> Self {
+        Self::DoubleConfigurable(axis_mod_window, one, two)
+    }
+    /// Returns a Modifier that adds `config` to the input.
     pub fn add(config: f32) -> Self {
         Self::Configurable(axis_mod_add, config)
     }
@@ -57,6 +71,10 @@ pub fn axis_mod_sensitivity(value: f32, config: f32) -> f32 {
 
 pub fn axis_mod_dead_zone(value: f32, config: f32) -> f32 {
     if value < config { 0. } else { value }
+}
+
+pub fn axis_mod_window(value: f32, one: f32, two: f32) -> f32 {
+    if value >= one && value <= two  { value } else { 0. }
 }
 
 pub fn axis_mod_add(value: f32, config: f32) -> f32 {
