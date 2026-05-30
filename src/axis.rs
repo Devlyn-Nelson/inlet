@@ -143,40 +143,47 @@ impl Ord for AxisBindingKind {
         match self {
             AxisBindingKind::Mouse(mouse_axis) => match other {
                 AxisBindingKind::Mouse(other_mouse_axis) => mouse_axis.cmp(other_mouse_axis),
-                AxisBindingKind::GamepadAxis(_) |
-                AxisBindingKind::GamepadButton(_) |
-                AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
+                AxisBindingKind::GamepadAxis(_)
+                | AxisBindingKind::GamepadButton(_)
+                | AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
             },
             AxisBindingKind::GamepadAxis(gamepad_axis) => match other {
                 AxisBindingKind::Mouse(_) => std::cmp::Ordering::Greater,
                 AxisBindingKind::GamepadAxis(other_gamepad_axis) => match gamepad_axis {
-                    GamepadAxis::Other(custom_axis) => if let GamepadAxis::Other(other_custom_axis) = other_gamepad_axis {
-                        custom_axis.cmp(other_custom_axis)
-                    }else{
-                        std::cmp::Ordering::Greater
-                    },
-                    _ => {
-                        stick_index(gamepad_axis).cmp(&stick_index(other_gamepad_axis))
+                    GamepadAxis::Other(custom_axis) => {
+                        if let GamepadAxis::Other(other_custom_axis) = other_gamepad_axis {
+                            custom_axis.cmp(other_custom_axis)
+                        } else {
+                            std::cmp::Ordering::Greater
+                        }
                     }
+                    _ => stick_index(gamepad_axis).cmp(&stick_index(other_gamepad_axis)),
                 },
-                AxisBindingKind::GamepadButton(_) |
-                AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
+                AxisBindingKind::GamepadButton(_) | AxisBindingKind::Buttons { .. } => {
+                    std::cmp::Ordering::Less
+                }
             },
             AxisBindingKind::GamepadButton(gamepad_button) => match other {
-                AxisBindingKind::Mouse(_) |
-                AxisBindingKind::GamepadAxis(_) => std::cmp::Ordering::Greater,
-                AxisBindingKind::GamepadButton(other_gamepad_button) => gamepad_button.cmp(other_gamepad_button),
+                AxisBindingKind::Mouse(_) | AxisBindingKind::GamepadAxis(_) => {
+                    std::cmp::Ordering::Greater
+                }
+                AxisBindingKind::GamepadButton(other_gamepad_button) => {
+                    gamepad_button.cmp(other_gamepad_button)
+                }
                 AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
             },
             AxisBindingKind::Buttons { plus, minus } => match other {
-                AxisBindingKind::Mouse(_) |
-                AxisBindingKind::GamepadAxis(_) |
-                AxisBindingKind::GamepadButton(_) => std::cmp::Ordering::Greater,
-                AxisBindingKind::Buttons { plus: other_plus, minus: other_minus } => {
+                AxisBindingKind::Mouse(_)
+                | AxisBindingKind::GamepadAxis(_)
+                | AxisBindingKind::GamepadButton(_) => std::cmp::Ordering::Greater,
+                AxisBindingKind::Buttons {
+                    plus: other_plus,
+                    minus: other_minus,
+                } => {
                     let p = plus.cmp(other_plus);
                     if matches!(p, std::cmp::Ordering::Equal) {
                         minus.cmp(other_minus)
-                    }else{
+                    } else {
                         p
                     }
                 }

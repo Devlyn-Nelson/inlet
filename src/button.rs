@@ -131,7 +131,7 @@ impl PartialOrd for ButtonBinding {
     }
 }
 
-fn mouse_index(b: &MouseButton) -> u8{
+fn mouse_index(b: &MouseButton) -> u8 {
     match b {
         MouseButton::Left => 0,
         MouseButton::Right => 1,
@@ -147,54 +147,56 @@ impl Ord for ButtonBinding {
         match self {
             ButtonBinding::Chord(button_chord) => match other {
                 ButtonBinding::Chord(other_button_chord) => button_chord.cmp(other_button_chord),
-                ButtonBinding::Combo(_) |
-                ButtonBinding::Keyboard(_) |
-                ButtonBinding::Mouse(_) |
-                ButtonBinding::Gamepad(_) |
-                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                ButtonBinding::Combo(_)
+                | ButtonBinding::Keyboard(_)
+                | ButtonBinding::Mouse(_)
+                | ButtonBinding::Gamepad(_)
+                | ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Combo(button_combo) => match other {
                 ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Combo(other_button_combo) => button_combo.cmp(other_button_combo),
-                ButtonBinding::Keyboard(_) |
-                ButtonBinding::Mouse(_) |
-                ButtonBinding::Gamepad(_) |
-                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                ButtonBinding::Keyboard(_)
+                | ButtonBinding::Mouse(_)
+                | ButtonBinding::Gamepad(_)
+                | ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Keyboard(asdf) => match other {
-                ButtonBinding::Combo(_) |
-                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Combo(_) | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Keyboard(o_asdf) => asdf.cmp(o_asdf),
-                ButtonBinding::Mouse(_) |
-                ButtonBinding::Gamepad(_) |
-                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                ButtonBinding::Mouse(_) | ButtonBinding::Gamepad(_) | ButtonBinding::Axis(_) => {
+                    std::cmp::Ordering::Less
+                }
             },
             ButtonBinding::Mouse(asdf) => match other {
-                ButtonBinding::Keyboard(_) |
-                ButtonBinding::Combo(_) |
-                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
-                ButtonBinding::Mouse(o_asdf) => if let MouseButton::Other(one) = asdf && let MouseButton::Other(two) = o_asdf {
-                    one.cmp(two)
-                }else{
-                    mouse_index(asdf).cmp(&mouse_index(o_asdf))
-                },
-                ButtonBinding::Gamepad(_) |
-                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                ButtonBinding::Keyboard(_) | ButtonBinding::Combo(_) | ButtonBinding::Chord(_) => {
+                    std::cmp::Ordering::Greater
+                }
+                ButtonBinding::Mouse(o_asdf) => {
+                    if let MouseButton::Other(one) = asdf
+                        && let MouseButton::Other(two) = o_asdf
+                    {
+                        one.cmp(two)
+                    } else {
+                        mouse_index(asdf).cmp(&mouse_index(o_asdf))
+                    }
+                }
+                ButtonBinding::Gamepad(_) | ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Gamepad(asdf) => match other {
-                ButtonBinding::Mouse(_) |
-                ButtonBinding::Keyboard(_) |
-                ButtonBinding::Combo(_) |
-                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Mouse(_)
+                | ButtonBinding::Keyboard(_)
+                | ButtonBinding::Combo(_)
+                | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Gamepad(o_asdf) => asdf.cmp(o_asdf),
                 ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Axis(asdf) => match other {
-                ButtonBinding::Gamepad(_) |
-                ButtonBinding::Mouse(_) |
-                ButtonBinding::Keyboard(_) |
-                ButtonBinding::Combo(_) |
-                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Gamepad(_)
+                | ButtonBinding::Mouse(_)
+                | ButtonBinding::Keyboard(_)
+                | ButtonBinding::Combo(_)
+                | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Axis(o_asdf) => asdf.cmp(o_asdf),
             },
         }
@@ -326,8 +328,7 @@ impl ActionableState {
     pub fn tick(&mut self, pressed: bool) -> ActionableStateTick {
         if pressed {
             match self {
-                ActionableState::Released
-                | ActionableState::JustReleased => {
+                ActionableState::Released | ActionableState::JustReleased => {
                     *self = ActionableState::JustPressed;
                     ActionableStateTick::Transitioned
                 }
@@ -339,8 +340,7 @@ impl ActionableState {
             }
         } else {
             match self {
-                ActionableState::Pressed
-                | ActionableState::JustPressed => {
+                ActionableState::Pressed | ActionableState::JustPressed => {
                     *self = ActionableState::JustReleased;
                     ActionableStateTick::Transitioned
                 }
@@ -353,19 +353,16 @@ impl ActionableState {
         }
     }
     pub fn is_released(&self) -> bool {
-        matches!(
-            self,
-            Self::JustReleased | Self::Released
-        )
+        matches!(self, Self::JustReleased | Self::Released)
     }
     pub fn is_pressed(&self) -> bool {
         matches!(self, Self::JustPressed | Self::Pressed)
     }
-    pub fn was_just_pressed(&self) -> bool {
+    pub fn is_just_pressed(&self) -> bool {
         matches!(self, Self::JustPressed)
     }
-    pub fn was_pressed(&self) -> bool {
-        matches!(self, Self::JustPressed)
+    pub fn is_just_released(&self) -> bool {
+        matches!(self, Self::JustReleased)
     }
 }
 

@@ -1,6 +1,10 @@
 use std::{hash::Hash, marker::PhantomData};
 
-use bevy::app::{Plugin, PreUpdate};
+use bevy::{
+    app::{Plugin, PreUpdate},
+    ecs::schedule::IntoScheduleConfigs,
+    input::InputSystems,
+};
 
 use crate::{BindEvent, SimpleMessage, systems::gather_button_inputs};
 
@@ -15,7 +19,7 @@ where
     I: BindEvent + Sync + Send + 'static,
 {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_systems(PreUpdate, gather_button_inputs::<K, I>)
+        app.add_systems(PreUpdate, gather_button_inputs::<K, I>.after(InputSystems))
             .add_message::<I>();
     }
 }

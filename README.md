@@ -210,3 +210,4 @@ Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system 
 - [ ] Clash Detection
   - [ ] Combos
   - [ ] Chords
+- [ ] Mock Inputs
