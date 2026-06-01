@@ -8,7 +8,10 @@ use bevy::{
     math::Vec2,
 };
 
-use crate::button::{ActionableState, ButtonBinding, ButtonState};
+use crate::{
+    button::{ActionableState, ButtonBinding, ButtonState},
+    clash::ClashableKind,
+};
 
 /// Allows you to customize the behavior of an axis.
 #[allow(unpredictable_function_pointer_comparisons)]
@@ -114,7 +117,7 @@ impl From<ButtonBinding> for AxisBindingButton {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MouseAxis {
     MotionX,
     MotionY,
@@ -233,6 +236,28 @@ impl Ord for AxisBinding {
 }
 
 impl AxisBinding {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        let mut out = Vec::default();
+        match &self.kind {
+            AxisBindingKind::Mouse(mouse_axis) => out.push(ClashableKind::MouseAxis(*mouse_axis)),
+            AxisBindingKind::GamepadAxis(gamepad_axis) => {
+                out.push(ClashableKind::GamepadAxis(*gamepad_axis))
+            }
+            AxisBindingKind::GamepadButton(gamepad_button) => {
+                out.push(ClashableKind::GamepadButton(*gamepad_button))
+            }
+            AxisBindingKind::Buttons { plus, minus } => {
+                if let Some(p) = plus {
+                    out.extend(p.binding.clashables());
+                }
+                if let Some(m) = minus {
+                    out.extend(m.binding.clashables());
+                }
+            }
+        }
+        out
+    }
+
     pub fn mods(&self) -> &[AxisModifier] {
         &self.mod_stack
     }
@@ -409,13 +434,13 @@ impl ValueState {
             kind: if self.pressed() {
                 if self.previous == 0. {
                     ActionableState::JustPressed
-                }else{
+                } else {
                     ActionableState::Pressed
                 }
-            }else{
+            } else {
                 if self.previous == 0. {
                     ActionableState::Released
-                }else{
+                } else {
                     ActionableState::JustReleased
                 }
             },
@@ -484,7 +509,11 @@ impl ValueState {
 
 impl Default for ValueState {
     fn default() -> Self {
-        Self { previous: 0., current: 0., last_transition: Instant::now() }
+        Self {
+            previous: 0.,
+            current: 0.,
+            last_transition: Instant::now(),
+        }
     }
 }
 
@@ -496,6 +525,13 @@ pub struct ValueBinding<T> {
 }
 
 impl<T> ValueBinding<T> {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        let mut out = Vec::default();
+        for b in &self.bindings {
+            out.extend(b.clashables());
+        }
+        out
+    }
     pub fn state(&self) -> &ValueState {
         &self.state
     }
@@ -597,6 +633,16 @@ pub struct DualValueBinding<T> {
     pub(crate) y_state: ValueState,
 }
 impl<T> DualValueBinding<T> {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        let mut out = Vec::default();
+        for b in &self.x_bindings {
+            out.extend(b.clashables());
+        }
+        for b in &self.y_bindings {
+            out.extend(b.clashables());
+        }
+        out
+    }
     pub fn x_state(&self) -> &ValueState {
         &self.x_state
     }
@@ -606,11 +652,7 @@ impl<T> DualValueBinding<T> {
     pub fn last_transition(&self) -> Instant {
         let x = self.x_state.last_transition;
         let y = self.y_state.last_transition;
-        if x < y {
-            y
-        }else{
-            x
-        }
+        if x < y { y } else { x }
     }
     pub fn x_bindings(&self) -> &[AxisBinding] {
         &self.x_bindings

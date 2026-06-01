@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::time::{Duration, Instant};
 
 use bevy::{
@@ -5,7 +6,10 @@ use bevy::{
     prelude::GamepadButton,
 };
 
-use crate::axis::{AxisBinding, ValueState};
+use crate::{
+    axis::{AxisBinding, ValueState},
+    clash::ClashableKind,
+};
 
 /// A set of buttons that must all be pressed at once to be considered active.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +37,16 @@ impl PartialOrd for ButtonChord {
 }
 
 impl ButtonChord {
+    pub fn len(&self) -> usize {
+        self.actions.len()
+    }
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        self.actions
+            .iter()
+            .flat_map(|asdf| asdf.clashables())
+            .dedup()
+            .collect()
+    }
     pub fn bindings(&self) -> &[ButtonBinding] {
         &self.actions
     }
@@ -82,15 +96,24 @@ impl PartialOrd for ButtonCombo {
 }
 
 impl ButtonCombo {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        self.actions
+            .iter()
+            .flat_map(|asdf| asdf.clashables())
+            .dedup()
+            .collect()
+    }
     pub fn rules(&self) -> ButtonComboRules {
         self.rules
     }
     /// Creates a new button combo bindings.
-    pub fn new_with_tolerance(bindings: Vec<ButtonBinding>, rules: ButtonComboRules, tolerance: Duration) -> Self {
+    pub fn new_with_tolerance(
+        bindings: Vec<ButtonBinding>,
+        rules: ButtonComboRules,
+        tolerance: Duration,
+    ) -> Self {
         if bindings.len() <= 1 {
-            bevy::log::warn!(
-                "inlet detected a button combo that is less than 2 buttons long."
-            )
+            bevy::log::warn!("inlet detected a button combo that is less than 2 buttons long.")
         }
         ButtonCombo {
             actions: bindings,
@@ -101,7 +124,10 @@ impl ButtonCombo {
         }
     }
     /// Creates a new button combo bindings with default [`ButtonComboRules`].
-    pub fn new_with_tolerance_default_rules(bindings: Vec<ButtonBinding>, tolerance: Duration) -> Self {
+    pub fn new_with_tolerance_default_rules(
+        bindings: Vec<ButtonBinding>,
+        tolerance: Duration,
+    ) -> Self {
         Self::new_with_tolerance(bindings, ButtonComboRules::default(), tolerance)
     }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
@@ -110,8 +136,11 @@ impl ButtonCombo {
     }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
     pub fn new_default_rules(bindings: Vec<ButtonBinding>) -> Self {
-        
-        Self::new_with_tolerance(bindings, ButtonComboRules::default(), Duration::from_millis(250))
+        Self::new_with_tolerance(
+            bindings,
+            ButtonComboRules::default(),
+            Duration::from_millis(250),
+        )
     }
     /// Returns the amount of time allowed to pass before the combo gets reset.
     pub fn tolerance(&self) -> Duration {
@@ -128,14 +157,14 @@ impl ButtonCombo {
         self
     }
     /// Grabs the expected button binding that would need to happen in order for the combo to be progressed.
-    /// 
+    ///
     /// # Warning
-    /// 
+    ///
     /// If the timer between expected presses ran out, it will return the first binding.
     pub fn expected_binding(&self) -> &ButtonBinding {
         let i = if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
-           0
-        }else{
+            0
+        } else {
             self.current_index
         };
         &self.actions[i]
@@ -146,7 +175,7 @@ impl ButtonCombo {
         let i = self.current_index + 1;
         if i == self.actions.len() {
             None
-        }else{
+        } else {
             Some(&self.actions[i])
         }
     }
@@ -155,16 +184,16 @@ impl ButtonCombo {
     pub fn previous_binding(&self) -> Option<&ButtonBinding> {
         if self.current_index == 0 {
             None
-        }else{
+        } else {
             Some(&self.actions[self.current_index - 1])
         }
     }
     /// Grabs the expected button binding that would need to happen in order for the combo to be progressed.
-    /// 
+    ///
     /// # Warning
-    /// 
+    ///
     /// This will update the state of the combo if the timer between expected presses has run out.
-    /// 
+    ///
     /// If the duration between the last time `self.hit()` and the call of this function is greater than `self.tolerance`
     /// the combo will reset to the beginning of the combo.
     pub fn expected_binding_mut(&mut self) -> &mut ButtonBinding {
@@ -179,7 +208,7 @@ impl ButtonCombo {
         let i = self.current_index + 1;
         if i == self.actions.len() {
             None
-        }else{
+        } else {
             Some(&mut self.actions[i])
         }
     }
@@ -188,7 +217,7 @@ impl ButtonCombo {
     pub fn previous_binding_mut(&mut self) -> Option<&mut ButtonBinding> {
         if self.current_index == 0 {
             None
-        }else{
+        } else {
             Some(&mut self.actions[self.current_index - 1])
         }
     }
@@ -227,6 +256,27 @@ pub enum ButtonBinding {
 }
 
 impl ButtonBinding {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        let mut out = Vec::with_capacity(1);
+        match self {
+            ButtonBinding::Chord(button_chord) => out.extend(button_chord.clashables()),
+            ButtonBinding::Combo(button_combo) => out.extend(button_combo.clashables()),
+            ButtonBinding::Keyboard(key_code) => out.push(ClashableKind::Keyboard(*key_code)),
+            ButtonBinding::Mouse(mouse_button) => {
+                out.push(ClashableKind::MouseButton(*mouse_button))
+            }
+            ButtonBinding::Gamepad(gamepad_button) => {
+                out.push(ClashableKind::GamepadButton(*gamepad_button))
+            }
+            ButtonBinding::Axis(axis_binding) => {
+                out.extend(axis_binding.clashables());
+            }
+            ButtonBinding::Mock(_) => {
+                // No bindings to clash with.
+            }
+        }
+        out
+    }
     pub fn is_mock(&self) -> bool {
         matches!(self, Self::Mock(_))
     }
@@ -372,12 +422,16 @@ pub struct ButtonState {
 impl ButtonState {
     pub fn value_state(&self) -> ValueState {
         let (previous, current) = match self.kind {
-            ActionableState::Released => (0.,0.),
+            ActionableState::Released => (0., 0.),
             ActionableState::JustPressed => (0., 1.),
             ActionableState::Pressed => (1., 1.),
             ActionableState::JustReleased => (1., 0.),
         };
-        ValueState { previous, current, last_transition: self.start }
+        ValueState {
+            previous,
+            current,
+            last_transition: self.start,
+        }
     }
     pub fn kind(&self) -> &ActionableState {
         &self.kind
@@ -542,6 +596,13 @@ pub struct ActionBinding<T> {
 }
 
 impl<T> ActionBinding<T> {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        let mut out = Vec::default();
+        for b in &self.bindings {
+            out.extend(b.clashables());
+        }
+        out
+    }
     pub fn bindings(&self) -> &[ButtonBinding] {
         &self.bindings
     }
@@ -661,6 +722,18 @@ impl<T> From<Vec<ButtonBinding>> for ActionBinding<T> {
 impl<T> From<(Vec<ButtonBinding>, ButtonEventBinding<T>)> for ActionBinding<T> {
     fn from(value: (Vec<ButtonBinding>, ButtonEventBinding<T>)) -> Self {
         ActionBinding::new(value.0, value.1)
+    }
+}
+
+impl<T> From<ButtonChord> for ActionBinding<T> {
+    fn from(value: ButtonChord) -> Self {
+        ActionBinding::new_no_event(vec![ButtonBinding::Chord(value)])
+    }
+}
+
+impl<T> From<ButtonCombo> for ActionBinding<T> {
+    fn from(value: ButtonCombo) -> Self {
+        ActionBinding::new_no_event(vec![ButtonBinding::Combo(value)])
     }
 }
 

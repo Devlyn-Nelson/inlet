@@ -1,6 +1,6 @@
 pub mod axis;
 pub mod button;
-// pub mod clash;
+pub mod clash;
 mod plugins;
 mod systems;
 
@@ -18,6 +18,7 @@ use bevy::{
 use crate::{
     axis::{DualValueBinding, ValueBinding},
     button::ButtonState,
+    clash::ClashableKind,
 };
 
 pub trait BindEvent: Message {}
@@ -36,6 +37,13 @@ pub enum InputBinding<T> {
 }
 
 impl<T> InputBinding<T> {
+    pub fn clashables(&self) -> Vec<ClashableKind> {
+        match self {
+            InputBinding::Action(action_binding) => action_binding.clashables(),
+            InputBinding::Value(value_binding) => value_binding.clashables(),
+            InputBinding::DualValue(dual_value_binding) => dual_value_binding.clashables(),
+        }
+    }
     pub fn state(&self) -> ButtonState {
         match self {
             InputBinding::Action(action_binding) => *action_binding.state(),
@@ -99,9 +107,7 @@ impl<T> InputBinding<T> {
     /// The output will be the average of the two values output from the [`DualValueBinding`].
     pub fn value(&self) -> f32 {
         match self {
-            InputBinding::Action(action_binding) => {
-                pressed_to_value(action_binding.pressed())
-            }
+            InputBinding::Action(action_binding) => pressed_to_value(action_binding.pressed()),
             InputBinding::Value(value_binding) => value_binding.value(),
             InputBinding::DualValue(dual_value_binding) => {
                 let out = dual_value_binding.value();
@@ -140,17 +146,14 @@ pub fn value_to_press(val: f32) -> bool {
 
 #[inline]
 pub fn pressed_to_value(pressed: bool) -> f32 {
-    if pressed {
-        1.0
-    } else {
-        0.0
-    }
+    if pressed { 1.0 } else { 0.0 }
 }
 
 #[derive(Component)]
 pub struct InputBindings<K, T: BindEvent> {
     pub(crate) bindings: HashMap<K, InputBinding<T>>,
     pub(crate) assigned_gamepad: Option<Entity>,
+    pub(crate) changed: bool,
 }
 
 impl<K, T> InputBindings<K, T>
@@ -170,11 +173,20 @@ where
         self.register_dual_value_binding(name, bindings);
         self
     }
+    pub(crate) fn changed(&mut self) -> bool {
+        if self.changed {
+            self.changed = false;
+            true
+        } else {
+            false
+        }
+    }
     pub fn register_binding(
         &mut self,
         name: K,
         bindings: InputBinding<T>,
     ) -> Option<InputBinding<T>> {
+        self.changed = true;
         self.bindings.insert(name, bindings)
     }
     pub fn register_action_binding(
@@ -202,6 +214,7 @@ where
         Self {
             bindings: HashMap::default(),
             assigned_gamepad: None,
+            changed: false,
         }
     }
     pub fn get_binding(&self, name: &K) -> Option<&InputBinding<T>> {
