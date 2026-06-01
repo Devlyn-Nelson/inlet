@@ -5,7 +5,7 @@ use bevy::{
     prelude::GamepadButton,
 };
 
-use crate::axis::AxisBinding;
+use crate::axis::{AxisBinding, ValueState};
 
 /// A set of buttons that must all be pressed at once to be considered active.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +44,14 @@ impl ButtonChord {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ButtonComboRules {
+    None,
+    PreviousMustBeReleased,
+    #[default]
+    NextMustBeReleased,
+}
+
 /// A set of buttons that must all be pressed one after another to become active.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ButtonCombo {
@@ -51,6 +59,7 @@ pub struct ButtonCombo {
     current_index: usize,
     last_hit: Instant,
     tolerance: Duration,
+    rules: ButtonComboRules,
 }
 
 impl Ord for ButtonCombo {
@@ -73,23 +82,36 @@ impl PartialOrd for ButtonCombo {
 }
 
 impl ButtonCombo {
+    pub fn rules(&self) -> ButtonComboRules {
+        self.rules
+    }
     /// Creates a new button combo bindings.
-    pub fn from_tolerance(bindings: Vec<ButtonBinding>, tolerance: Duration) -> Self {
+    pub fn new_with_tolerance(bindings: Vec<ButtonBinding>, rules: ButtonComboRules, tolerance: Duration) -> Self {
+        if bindings.len() <= 1 {
+            bevy::log::warn!(
+                "inlet detected a button combo that is less than 2 buttons long."
+            )
+        }
         ButtonCombo {
             actions: bindings,
             current_index: 0,
             last_hit: Instant::now(),
             tolerance,
+            rules,
         }
     }
+    /// Creates a new button combo bindings with default [`ButtonComboRules`].
+    pub fn new_with_tolerance_default_rules(bindings: Vec<ButtonBinding>, tolerance: Duration) -> Self {
+        Self::new_with_tolerance(bindings, ButtonComboRules::default(), tolerance)
+    }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new(bindings: Vec<ButtonBinding>) -> Self {
-        ButtonCombo {
-            actions: bindings,
-            current_index: 0,
-            last_hit: Instant::now(),
-            tolerance: Duration::from_millis(250),
-        }
+    pub fn new(bindings: Vec<ButtonBinding>, rules: ButtonComboRules) -> Self {
+        Self::new_with_tolerance(bindings, rules, Duration::from_millis(250))
+    }
+    /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
+    pub fn new_default_rules(bindings: Vec<ButtonBinding>) -> Self {
+        
+        Self::new_with_tolerance(bindings, ButtonComboRules::default(), Duration::from_millis(250))
     }
     /// Returns the amount of time allowed to pass before the combo gets reset.
     pub fn tolerance(&self) -> Duration {
@@ -100,14 +122,75 @@ impl ButtonCombo {
         self.tolerance = tolerance;
         self
     }
-    /// Grabs the next expected button binding that would need to happen in order for the combo to be progressed.
+    /// Sets the rules.
+    pub fn with_rules(mut self, rules: ButtonComboRules) -> Self {
+        self.rules = rules;
+        self
+    }
+    /// Grabs the expected button binding that would need to happen in order for the combo to be progressed.
+    /// 
+    /// # Warning
+    /// 
+    /// If the timer between expected presses ran out, it will return the first binding.
+    pub fn expected_binding(&self) -> &ButtonBinding {
+        let i = if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
+           0
+        }else{
+            self.current_index
+        };
+        &self.actions[i]
+    }
+    /// Grabs the binding after [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the last
+    /// binding to expect.
+    pub fn next_binding(&self) -> Option<&ButtonBinding> {
+        let i = self.current_index + 1;
+        if i == self.actions.len() {
+            None
+        }else{
+            Some(&self.actions[i])
+        }
+    }
+    /// Grabs the binding before [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the first
+    /// binding to expect.
+    pub fn previous_binding(&self) -> Option<&ButtonBinding> {
+        if self.current_index == 0 {
+            None
+        }else{
+            Some(&self.actions[self.current_index - 1])
+        }
+    }
+    /// Grabs the expected button binding that would need to happen in order for the combo to be progressed.
+    /// 
+    /// # Warning
+    /// 
+    /// This will update the state of the combo if the timer between expected presses has run out.
+    /// 
     /// If the duration between the last time `self.hit()` and the call of this function is greater than `self.tolerance`
     /// the combo will reset to the beginning of the combo.
-    pub fn next_binding(&mut self) -> &mut ButtonBinding {
+    pub fn expected_binding_mut(&mut self) -> &mut ButtonBinding {
         if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
             self.current_index = 0;
         }
         &mut self.actions[self.current_index]
+    }
+    /// Grabs the binding after [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the last
+    /// binding to expect.
+    pub fn next_binding_mut(&mut self) -> Option<&mut ButtonBinding> {
+        let i = self.current_index + 1;
+        if i == self.actions.len() {
+            None
+        }else{
+            Some(&mut self.actions[i])
+        }
+    }
+    /// Grabs the binding before [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the first
+    /// binding to expect.
+    pub fn previous_binding_mut(&mut self) -> Option<&mut ButtonBinding> {
+        if self.current_index == 0 {
+            None
+        }else{
+            Some(&mut self.actions[self.current_index - 1])
+        }
     }
     /// Tells the combo that the next expected button was pressed "on time". Returns `true` if the combo was
     /// completed, which also indicates that the combo will reset to expect the first button press.
@@ -139,6 +222,14 @@ pub enum ButtonBinding {
     Gamepad(GamepadButton),
     /// An [`AxisBinding`] that will be interpreted as a button. A value of 0 is Released otherwise it is Pressed.
     Axis(Box<AxisBinding>),
+    /// Contains a mock input value. Must be set.
+    Mock(bool),
+}
+
+impl ButtonBinding {
+    pub fn is_mock(&self) -> bool {
+        matches!(self, Self::Mock(_))
+    }
 }
 
 impl PartialOrd for ButtonBinding {
@@ -167,7 +258,8 @@ impl Ord for ButtonBinding {
                 | ButtonBinding::Keyboard(_)
                 | ButtonBinding::Mouse(_)
                 | ButtonBinding::Gamepad(_)
-                | ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                | ButtonBinding::Axis(_)
+                | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Combo(button_combo) => match other {
                 ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
@@ -175,14 +267,16 @@ impl Ord for ButtonBinding {
                 ButtonBinding::Keyboard(_)
                 | ButtonBinding::Mouse(_)
                 | ButtonBinding::Gamepad(_)
-                | ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                | ButtonBinding::Axis(_)
+                | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Keyboard(asdf) => match other {
                 ButtonBinding::Combo(_) | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Keyboard(o_asdf) => asdf.cmp(o_asdf),
-                ButtonBinding::Mouse(_) | ButtonBinding::Gamepad(_) | ButtonBinding::Axis(_) => {
-                    std::cmp::Ordering::Less
-                }
+                ButtonBinding::Mouse(_)
+                | ButtonBinding::Gamepad(_)
+                | ButtonBinding::Axis(_)
+                | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Mouse(asdf) => match other {
                 ButtonBinding::Keyboard(_) | ButtonBinding::Combo(_) | ButtonBinding::Chord(_) => {
@@ -197,7 +291,9 @@ impl Ord for ButtonBinding {
                         mouse_index(asdf).cmp(&mouse_index(o_asdf))
                     }
                 }
-                ButtonBinding::Gamepad(_) | ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                ButtonBinding::Gamepad(_) | ButtonBinding::Axis(_) | ButtonBinding::Mock(_) => {
+                    std::cmp::Ordering::Less
+                }
             },
             ButtonBinding::Gamepad(asdf) => match other {
                 ButtonBinding::Mouse(_)
@@ -205,7 +301,7 @@ impl Ord for ButtonBinding {
                 | ButtonBinding::Combo(_)
                 | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Gamepad(o_asdf) => asdf.cmp(o_asdf),
-                ButtonBinding::Axis(_) => std::cmp::Ordering::Less,
+                ButtonBinding::Axis(_) | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
             },
             ButtonBinding::Axis(asdf) => match other {
                 ButtonBinding::Gamepad(_)
@@ -214,6 +310,16 @@ impl Ord for ButtonBinding {
                 | ButtonBinding::Combo(_)
                 | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
                 ButtonBinding::Axis(o_asdf) => asdf.cmp(o_asdf),
+                ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
+            },
+            ButtonBinding::Mock(asdf) => match other {
+                ButtonBinding::Gamepad(_)
+                | ButtonBinding::Mouse(_)
+                | ButtonBinding::Keyboard(_)
+                | ButtonBinding::Combo(_)
+                | ButtonBinding::Chord(_)
+                | ButtonBinding::Axis(_) => std::cmp::Ordering::Greater,
+                ButtonBinding::Mock(o_asdf) => asdf.cmp(o_asdf),
             },
         }
     }
@@ -259,24 +365,36 @@ impl From<AxisBinding> for ButtonBinding {
 /// [`ActionableState::JustPressed`] or [`ActionableState::JustReleased`].
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
 pub struct ButtonState {
-    pub(crate) ty: ActionableState,
+    pub(crate) kind: ActionableState,
     pub(crate) start: Instant,
 }
 
 impl ButtonState {
-    /// The amount of time passed between the last time the internal state
+    pub fn value_state(&self) -> ValueState {
+        let (previous, current) = match self.kind {
+            ActionableState::Released => (0.,0.),
+            ActionableState::JustPressed => (0., 1.),
+            ActionableState::Pressed => (1., 1.),
+            ActionableState::JustReleased => (1., 0.),
+        };
+        ValueState { previous, current, last_transition: self.start }
+    }
+    pub fn kind(&self) -> &ActionableState {
+        &self.kind
+    }
+    /// The amount of time passed between now and the last time the internal state
     /// was changed to [`ActionableState::JustPressed`] or [`ActionableState::JustReleased`].
     pub fn last_transition(&self) -> Duration {
         self.start.elapsed()
     }
     /// Returns `true` if the internal [`ActionableState`] is `JustPressed`.
     pub fn just_pressed(&self) -> bool {
-        matches!(self.ty, ActionableState::JustPressed)
+        matches!(self.kind, ActionableState::JustPressed)
     }
     /// Returns `true` if the internal [`ActionableState`] is `JustPressed` or `Pressed`.
     pub fn pressed(&self) -> bool {
         matches!(
-            self.ty,
+            self.kind,
             ActionableState::Pressed | ActionableState::JustPressed
         )
     }
@@ -285,17 +403,17 @@ impl ButtonState {
     ///
     /// Note that a state of `JustPressed` will always return `false`.
     pub fn held_for(&self, duration: &Duration) -> bool {
-        matches!(self.ty, ActionableState::Pressed) && self.start.elapsed() >= *duration
+        matches!(self.kind, ActionableState::Pressed) && self.start.elapsed() >= *duration
     }
     /// Returns `true` if the internal [`ActionableState`] is `Pressed` and the result of [`Self::last_transition`]
     /// is greater than or equal to `start` and less than `stop`.
     pub fn held_range(&self, start: &Duration, stop: &Duration) -> bool {
         let elapsed = self.start.elapsed();
-        matches!(self.ty, ActionableState::Pressed) && elapsed >= *start && elapsed < *stop
+        matches!(self.kind, ActionableState::Pressed) && elapsed >= *start && elapsed < *stop
     }
     /// Returns time elapsed for a pressed state or `None`.
     pub fn try_get_held_duration(&self) -> Option<Duration> {
-        if matches!(self.ty, ActionableState::Pressed) {
+        if matches!(self.kind, ActionableState::Pressed) {
             Some(self.start.elapsed())
         } else {
             None
@@ -303,12 +421,12 @@ impl ButtonState {
     }
     /// Returns `true` if the internal [`ActionableState`] is `JustReleased`.
     pub fn just_released(&self) -> bool {
-        matches!(self.ty, ActionableState::JustReleased)
+        matches!(self.kind, ActionableState::JustReleased)
     }
     /// Returns `true` if the internal [`ActionableState`] is `JustReleased` or `Released`.
     pub fn released(&self) -> bool {
         matches!(
-            self.ty,
+            self.kind,
             ActionableState::Released | ActionableState::JustReleased
         )
     }
@@ -316,7 +434,7 @@ impl ButtonState {
     ///
     /// Returning `true` signifies that the internal state has changed.
     pub fn feed(&mut self, pressed: bool) -> bool {
-        match self.ty.tick(pressed) {
+        match self.kind.tick(pressed) {
             ActionableStateTick::None => false,
             ActionableStateTick::Changed => true,
             ActionableStateTick::Transitioned => {
@@ -330,7 +448,7 @@ impl ButtonState {
 impl Default for ButtonState {
     fn default() -> Self {
         Self {
-            ty: Default::default(),
+            kind: Default::default(),
             start: Instant::now(),
         }
     }
@@ -418,9 +536,9 @@ impl ActionableState {
 // `while_pressed_between`, `when_pressed_between`.
 /// An Action or Button with an [`ActionableState`], one or many [`ButtonBinding`], and a [`ButtonEventBinding<T>`].
 pub struct ActionBinding<T> {
-    bindings: Vec<ButtonBinding>,
-    event: ButtonEventBinding<T>,
-    state: ButtonState,
+    pub(crate) bindings: Vec<ButtonBinding>,
+    pub(crate) event: ButtonEventBinding<T>,
+    pub(crate) state: ButtonState,
 }
 
 impl<T> ActionBinding<T> {

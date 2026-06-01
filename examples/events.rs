@@ -97,7 +97,7 @@ fn setup(
                 (
                     vec![
                         // W -> S -> D -> A
-                        ButtonCombo::new(vec![
+                        ButtonCombo::new_default_rules(vec![
                             KeyCode::KeyW.into(),
                             KeyCode::KeyS.into(),
                             KeyCode::KeyD.into(),
@@ -105,7 +105,7 @@ fn setup(
                         ])
                         .into(),
                         // Up -> Down -> Right -> Left on dpad
-                        ButtonCombo::new(vec![
+                        ButtonCombo::new_default_rules(vec![
                             GamepadButton::DPadUp.into(),
                             GamepadButton::DPadDown.into(),
                             GamepadButton::DPadRight.into(),
@@ -113,7 +113,7 @@ fn setup(
                         ])
                         .into(),
                         // Up -> Down -> Right -> Left on joystick
-                        ButtonCombo::new(vec![
+                        ButtonCombo::new_default_rules(vec![
                             AxisBinding::gamepad_left_stick_y()
                                 .with_modifier(AxisModifier::POSITIVE_ONLY)
                                 .into(),
@@ -163,7 +163,7 @@ fn setup(
     // light
     commands.spawn((
         PointLight {
-            shadow_maps_enabled: true,
+            shadows_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 8.0, 4.0),

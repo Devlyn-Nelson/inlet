@@ -40,23 +40,23 @@ impl<T> InputBinding<T> {
         match self {
             InputBinding::Action(action_binding) => *action_binding.state(),
             InputBinding::Value(value_binding) => ButtonState {
-                ty: if value_binding.value() == 0. {
+                kind: if value_binding.value() == 0. {
                     button::ActionableState::Pressed
                 } else {
                     button::ActionableState::Released
                 },
-                start: value_binding.last_change(),
+                start: value_binding.last_transition(),
             },
             InputBinding::DualValue(dual_value_binding) => {
                 let out = dual_value_binding.value();
 
                 ButtonState {
-                    ty: if out.x == 0. && out.y == 0. {
+                    kind: if out.x == 0. && out.y == 0. {
                         button::ActionableState::Released
                     } else {
                         button::ActionableState::Pressed
                     },
-                    start: dual_value_binding.last_change(),
+                    start: dual_value_binding.last_transition(),
                 }
             }
         }
@@ -77,10 +77,10 @@ impl<T> InputBinding<T> {
     pub fn pressed(&self) -> bool {
         match self {
             InputBinding::Action(action_binding) => action_binding.pressed(),
-            InputBinding::Value(value_binding) => value_binding.value() != 0.,
+            InputBinding::Value(value_binding) => value_to_press(value_binding.value()),
             InputBinding::DualValue(dual_value_binding) => {
                 let out = dual_value_binding.value();
-                !(out.x == 0. || out.y == 0.)
+                value_to_press(out.x) && value_to_press(out.y)
             }
         }
     }
@@ -100,11 +100,7 @@ impl<T> InputBinding<T> {
     pub fn value(&self) -> f32 {
         match self {
             InputBinding::Action(action_binding) => {
-                if action_binding.pressed() {
-                    1.0
-                } else {
-                    0.0
-                }
+                pressed_to_value(action_binding.pressed())
             }
             InputBinding::Value(value_binding) => value_binding.value(),
             InputBinding::DualValue(dual_value_binding) => {
@@ -129,11 +125,25 @@ impl<T> InputBinding<T> {
     pub fn dual_value(&self) -> Vec2 {
         match self {
             InputBinding::Action(action_binding) => {
-                Vec2::splat(if action_binding.pressed() { 1.0 } else { 0.0 })
+                Vec2::splat(pressed_to_value(action_binding.pressed()))
             }
             InputBinding::Value(value_binding) => Vec2::splat(value_binding.value()),
             InputBinding::DualValue(dual_value_binding) => dual_value_binding.value(),
         }
+    }
+}
+
+#[inline]
+pub fn value_to_press(val: f32) -> bool {
+    val != 0.
+}
+
+#[inline]
+pub fn pressed_to_value(pressed: bool) -> f32 {
+    if pressed {
+        1.0
+    } else {
+        0.0
     }
 }
 

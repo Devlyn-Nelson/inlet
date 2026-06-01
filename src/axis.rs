@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bevy::{
     input::{
@@ -8,7 +8,7 @@ use bevy::{
     math::Vec2,
 };
 
-use crate::button::{ButtonBinding, ButtonState};
+use crate::button::{ActionableState, ButtonBinding, ButtonState};
 
 /// Allows you to customize the behavior of an axis.
 #[allow(unpredictable_function_pointer_comparisons)]
@@ -394,26 +394,116 @@ impl From<(ButtonBinding, ButtonBinding)> for AxisBinding {
     }
 }
 
-pub struct ValueBinding<T> {
-    bindings: Vec<AxisBinding>,
-    mod_stack: Vec<AxisModifier>,
-    event: fn(f32) -> Option<T>,
+pub struct ValueState {
+    pub(crate) previous: f32,
     /// The last value feed into this binding.
-    state: f32,
+    pub(crate) current: f32,
     /// Last instant that the value transitioned from zero to a non-zero value or a non-zero value to zero.
-    last_change: Instant,
+    pub(crate) last_transition: Instant,
+}
+
+impl ValueState {
+    #[inline]
+    pub fn action_state(&self) -> ButtonState {
+        ButtonState {
+            kind: if self.pressed() {
+                if self.previous == 0. {
+                    ActionableState::JustPressed
+                }else{
+                    ActionableState::Pressed
+                }
+            }else{
+                if self.previous == 0. {
+                    ActionableState::Released
+                }else{
+                    ActionableState::JustReleased
+                }
+            },
+            start: self.last_transition,
+        }
+    }
+    #[inline]
+    pub fn current(&self) -> f32 {
+        self.current
+    }
+    #[inline]
+    pub fn previous(&self) -> f32 {
+        self.previous
+    }
+    /// The amount of time passed between now and the last time the internal state transitioned from:
+    /// - 0 to a non-zero value.
+    /// - A non-zero value to 0.
+    #[inline]
+    pub fn last_transition(&self) -> Duration {
+        self.last_transition.elapsed()
+    }
+    /// Returns `true` if [`Self::current`] would return a zero non-zero value and [`Self::current`] would return zero.
+    #[inline]
+    pub fn just_pressed(&self) -> bool {
+        self.previous == 0. && self.current != 0.
+    }
+    /// Returns `true` if [`Self::current`] would return a zero non-zero value.
+    #[inline]
+    pub fn pressed(&self) -> bool {
+        self.current != 0.
+    }
+    /// Returns `true` if the internal state has been a non-zero value for `duration`, otherwise `false`.
+    pub fn held_for(&self, duration: &Duration) -> bool {
+        self.pressed() && self.last_transition.elapsed() >= *duration
+    }
+    /// Returns `true` if the internal state has been a non-zero value for at least `start` but less than `stop`.
+    pub fn held_range(&self, start: &Duration, stop: &Duration) -> bool {
+        let elapsed = self.last_transition.elapsed();
+        self.pressed() && elapsed >= *start && elapsed < *stop
+    }
+    /// Returns time elapsed for the internal state being a non-zero value state or `None`.
+    pub fn try_get_held_duration(&self) -> Option<Duration> {
+        if self.pressed() {
+            Some(self.last_transition.elapsed())
+        } else {
+            None
+        }
+    }
+    /// Returns `true` if [`Self::current`] would return zero and [`Self::current`] would return a non-zero value.
+    pub fn just_released(&self) -> bool {
+        self.previous != 0. && self.current == 0.
+    }
+    /// Returns `true` if [`Self::current`] would return zero.
+    pub fn released(&self) -> bool {
+        self.current == 0.
+    }
+    /// `value` will feed the internal current state and update necessary values.
+    pub fn feed(&mut self, value: f32) {
+        if (self.current == 0. && value != 0.) || (self.current != 0. && value == 0.) {
+            self.last_transition = Instant::now();
+        }
+        self.previous = self.current;
+        self.current = value;
+    }
+}
+
+impl Default for ValueState {
+    fn default() -> Self {
+        Self { previous: 0., current: 0., last_transition: Instant::now() }
+    }
+}
+
+pub struct ValueBinding<T> {
+    pub(crate) bindings: Vec<AxisBinding>,
+    pub(crate) mod_stack: Vec<AxisModifier>,
+    pub(crate) event: fn(f32) -> Option<T>,
+    pub(crate) state: ValueState,
 }
 
 impl<T> ValueBinding<T> {
-    pub fn last_change(&self) -> Instant {
-        self.last_change
+    pub fn state(&self) -> &ValueState {
+        &self.state
+    }
+    pub fn last_transition(&self) -> Instant {
+        self.state.last_transition
     }
     pub fn value(&self) -> f32 {
-        let mut v = self.state;
-        for m in &self.mod_stack {
-            v = m.do_thing(v);
-        }
-        v
+        self.state.current
     }
     pub fn bindings(&self) -> &[AxisBinding] {
         &self.bindings
@@ -422,11 +512,8 @@ impl<T> ValueBinding<T> {
         &mut self.bindings
     }
     pub fn feed(&mut self, value: f32) -> Option<T> {
-        if (self.state == 0. && value != 0.) || (self.state != 0. && value == 0.) {
-            self.last_change = Instant::now();
-        }
-        self.state = value;
-        (self.event)(value)
+        self.state.feed(value);
+        (self.event)(self.value())
     }
     pub fn from_parts(
         bindings: Vec<AxisBinding>,
@@ -437,8 +524,7 @@ impl<T> ValueBinding<T> {
             bindings,
             mod_stack,
             event,
-            state: 0.,
-            last_change: Instant::now(),
+            state: ValueState::default(),
         }
     }
     pub fn from_bindings(bindings: Vec<AxisBinding>) -> Self {
@@ -446,8 +532,7 @@ impl<T> ValueBinding<T> {
             bindings,
             mod_stack: vec![],
             event: no_event,
-            state: 0.,
-            last_change: Instant::now(),
+            state: ValueState::default(),
         }
     }
     pub fn from_binding(binding: AxisBinding) -> Self {
@@ -455,8 +540,7 @@ impl<T> ValueBinding<T> {
             bindings: vec![binding],
             mod_stack: vec![],
             event: no_event,
-            state: 0.,
-            last_change: Instant::now(),
+            state: ValueState::default(),
         }
     }
     pub fn with_event(mut self, event: fn(f32) -> Option<T>) -> Self {
@@ -504,18 +588,29 @@ fn no_event<T>(_: f32) -> Option<T> {
 }
 
 pub struct DualValueBinding<T> {
-    x_bindings: Vec<AxisBinding>,
-    x_mod_stack: Vec<AxisModifier>,
-    y_bindings: Vec<AxisBinding>,
-    y_mod_stack: Vec<AxisModifier>,
-    event: fn(Vec2) -> Option<T>,
-    state: Vec2,
-    /// Last instant that the value transitioned from zero to a non-zero value or a non-zero value to zero.
-    last_change: Instant,
+    pub(crate) x_bindings: Vec<AxisBinding>,
+    pub(crate) x_mod_stack: Vec<AxisModifier>,
+    pub(crate) y_bindings: Vec<AxisBinding>,
+    pub(crate) y_mod_stack: Vec<AxisModifier>,
+    pub(crate) event: fn(Vec2) -> Option<T>,
+    pub(crate) x_state: ValueState,
+    pub(crate) y_state: ValueState,
 }
 impl<T> DualValueBinding<T> {
-    pub fn last_change(&self) -> Instant {
-        self.last_change
+    pub fn x_state(&self) -> &ValueState {
+        &self.x_state
+    }
+    pub fn y_state(&self) -> &ValueState {
+        &self.y_state
+    }
+    pub fn last_transition(&self) -> Instant {
+        let x = self.x_state.last_transition;
+        let y = self.y_state.last_transition;
+        if x < y {
+            y
+        }else{
+            x
+        }
     }
     pub fn x_bindings(&self) -> &[AxisBinding] {
         &self.x_bindings
@@ -530,25 +625,12 @@ impl<T> DualValueBinding<T> {
         &mut self.y_bindings
     }
     pub fn feed(&mut self, value: Vec2) -> Option<T> {
-        if (self.state.y == 0. && value.y != 0.)
-            || (self.state.y != 0. && value.y == 0.)
-            || (self.state.x == 0. && value.x != 0.)
-            || (self.state.x != 0. && value.x == 0.)
-        {
-            self.last_change = Instant::now();
-        }
-        self.state = value;
-        (self.event)(value)
+        self.x_state.feed(value.x);
+        self.y_state.feed(value.y);
+        (self.event)(self.value())
     }
     pub fn value(&self) -> Vec2 {
-        let mut v = self.state;
-        for m in &self.x_mod_stack {
-            v.x = m.do_thing(v.x);
-        }
-        for m in &self.y_mod_stack {
-            v.y = m.do_thing(v.y);
-        }
-        v
+        Vec2::new(self.x_state.current, self.y_state.current)
     }
     pub fn with_x_modifier(mut self, modifier: AxisModifier) -> Self {
         self.x_mod_stack.push(modifier);
@@ -569,8 +651,8 @@ impl<T> DualValueBinding<T> {
             x_mod_stack: vec![],
             y_mod_stack: vec![],
             event: no_event_dual,
-            state: Vec2::default(),
-            last_change: Instant::now(),
+            x_state: ValueState::default(),
+            y_state: ValueState::default(),
         }
     }
     pub fn from_bindings(x: Vec<AxisBinding>, y: Vec<AxisBinding>) -> Self {
@@ -580,8 +662,8 @@ impl<T> DualValueBinding<T> {
             x_mod_stack: vec![],
             y_mod_stack: vec![],
             event: no_event_dual,
-            state: Vec2::default(),
-            last_change: Instant::now(),
+            x_state: ValueState::default(),
+            y_state: ValueState::default(),
         }
     }
 }
