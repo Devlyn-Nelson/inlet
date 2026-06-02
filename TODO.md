@@ -1,10 +1,9 @@
-- make it so combos are interrupted by other inputs.
-- fix clashing:
-  - Buffered clash seems to work, but Sorted currently allows lower priority bindings to receive an invalid true signal because if it is ordered to poll the clasher first
+- Interrupting Combos when an invalid button is pressed, with setting to disable interrupts.
+- fix unbuffered clashing. (Dedup Input Checks) could make this easier and better.
 
 # Maybe
 
-## Dedup input checks
+## Dedup Input Checks
 
 The `ClashHandler` and `InputBindings` have some intermix issues:
 - The `InputBindings` will be iterated through in an arbitrary order making un-buffered clash handling hard without complex ordering system.

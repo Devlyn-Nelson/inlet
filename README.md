@@ -206,8 +206,5 @@ Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system 
 
 # In Progress
 
-- [ ] Combos currently don't reset on an invalid input between inputs.
-- [ ] Clash Detection
-  - [ ] Combos
-  - [ ] Chords
-- [ ] Mock Inputs
+- Interrupting Combos when an invalid button is pressed, with setting to disable interrupts.
+- Better Clash Detection.
