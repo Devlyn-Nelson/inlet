@@ -12,28 +12,9 @@ use crate::{
 };
 
 /// A set of buttons that must all be pressed at once to be considered active.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ButtonChord {
     actions: Vec<ButtonBinding>,
-}
-
-impl Ord for ButtonChord {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let len = self.actions.len().min(other.actions.len());
-        for i in 0..len {
-            let cmp = self.actions[i].cmp(&other.actions[i]);
-            if matches!(cmp, std::cmp::Ordering::Greater | std::cmp::Ordering::Less) {
-                return cmp;
-            }
-        }
-        std::cmp::Ordering::Equal
-    }
-}
-
-impl PartialOrd for ButtonChord {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl ButtonChord {
@@ -67,32 +48,13 @@ pub enum ButtonComboRules {
 }
 
 /// A set of buttons that must all be pressed one after another to become active.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ButtonCombo {
     actions: Vec<ButtonBinding>,
     current_index: usize,
     last_hit: Instant,
     tolerance: Duration,
     rules: ButtonComboRules,
-}
-
-impl Ord for ButtonCombo {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let len = self.actions.len().min(other.actions.len());
-        for i in 0..len {
-            let cmp = self.actions[i].cmp(&other.actions[i]);
-            if matches!(cmp, std::cmp::Ordering::Greater | std::cmp::Ordering::Less) {
-                return cmp;
-            }
-        }
-        std::cmp::Ordering::Equal
-    }
-}
-
-impl PartialOrd for ButtonCombo {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl ButtonCombo {
@@ -237,7 +199,7 @@ impl ButtonCombo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ButtonBinding {
     /// A set of [`ButtonBinding`] that must all be active at once to be active.
     Chord(ButtonChord),
@@ -279,99 +241,6 @@ impl ButtonBinding {
     }
     pub fn is_mock(&self) -> bool {
         matches!(self, Self::Mock(_))
-    }
-}
-
-impl PartialOrd for ButtonBinding {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-fn mouse_index(b: &MouseButton) -> u8 {
-    match b {
-        MouseButton::Left => 0,
-        MouseButton::Right => 1,
-        MouseButton::Middle => 2,
-        MouseButton::Back => 3,
-        MouseButton::Forward => 4,
-        MouseButton::Other(_) => 5,
-    }
-}
-
-impl Ord for ButtonBinding {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self {
-            ButtonBinding::Chord(button_chord) => match other {
-                ButtonBinding::Chord(other_button_chord) => button_chord.cmp(other_button_chord),
-                ButtonBinding::Combo(_)
-                | ButtonBinding::Keyboard(_)
-                | ButtonBinding::Mouse(_)
-                | ButtonBinding::Gamepad(_)
-                | ButtonBinding::Axis(_)
-                | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
-            },
-            ButtonBinding::Combo(button_combo) => match other {
-                ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
-                ButtonBinding::Combo(other_button_combo) => button_combo.cmp(other_button_combo),
-                ButtonBinding::Keyboard(_)
-                | ButtonBinding::Mouse(_)
-                | ButtonBinding::Gamepad(_)
-                | ButtonBinding::Axis(_)
-                | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
-            },
-            ButtonBinding::Keyboard(asdf) => match other {
-                ButtonBinding::Combo(_) | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
-                ButtonBinding::Keyboard(o_asdf) => asdf.cmp(o_asdf),
-                ButtonBinding::Mouse(_)
-                | ButtonBinding::Gamepad(_)
-                | ButtonBinding::Axis(_)
-                | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
-            },
-            ButtonBinding::Mouse(asdf) => match other {
-                ButtonBinding::Keyboard(_) | ButtonBinding::Combo(_) | ButtonBinding::Chord(_) => {
-                    std::cmp::Ordering::Greater
-                }
-                ButtonBinding::Mouse(o_asdf) => {
-                    if let MouseButton::Other(one) = asdf
-                        && let MouseButton::Other(two) = o_asdf
-                    {
-                        one.cmp(two)
-                    } else {
-                        mouse_index(asdf).cmp(&mouse_index(o_asdf))
-                    }
-                }
-                ButtonBinding::Gamepad(_) | ButtonBinding::Axis(_) | ButtonBinding::Mock(_) => {
-                    std::cmp::Ordering::Less
-                }
-            },
-            ButtonBinding::Gamepad(asdf) => match other {
-                ButtonBinding::Mouse(_)
-                | ButtonBinding::Keyboard(_)
-                | ButtonBinding::Combo(_)
-                | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
-                ButtonBinding::Gamepad(o_asdf) => asdf.cmp(o_asdf),
-                ButtonBinding::Axis(_) | ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
-            },
-            ButtonBinding::Axis(asdf) => match other {
-                ButtonBinding::Gamepad(_)
-                | ButtonBinding::Mouse(_)
-                | ButtonBinding::Keyboard(_)
-                | ButtonBinding::Combo(_)
-                | ButtonBinding::Chord(_) => std::cmp::Ordering::Greater,
-                ButtonBinding::Axis(o_asdf) => asdf.cmp(o_asdf),
-                ButtonBinding::Mock(_) => std::cmp::Ordering::Less,
-            },
-            ButtonBinding::Mock(asdf) => match other {
-                ButtonBinding::Gamepad(_)
-                | ButtonBinding::Mouse(_)
-                | ButtonBinding::Keyboard(_)
-                | ButtonBinding::Combo(_)
-                | ButtonBinding::Chord(_)
-                | ButtonBinding::Axis(_) => std::cmp::Ordering::Greater,
-                ButtonBinding::Mock(o_asdf) => asdf.cmp(o_asdf),
-            },
-        }
     }
 }
 

@@ -432,6 +432,7 @@ fn check_axis_binding(
             crate::axis::MouseAxis::ScrollX => accumulated_mouse_scroll.delta.x,
             crate::axis::MouseAxis::ScrollY => accumulated_mouse_scroll.delta.y,
         },
+        AxisBindingKind::Mock(val) => *val,
     };
     for m in binding.mods() {
         out = m.do_thing(out);

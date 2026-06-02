@@ -90,22 +90,10 @@ pub fn axis_mod_add(value: f32, config: f32) -> f32 {
 
 impl Eq for AxisModifier {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AxisBindingButton {
     pub binding: ButtonBinding,
     pub state: ButtonState,
-}
-
-impl PartialOrd for AxisBindingButton {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.binding.partial_cmp(&other.binding)
-    }
-}
-
-impl Ord for AxisBindingButton {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.binding.cmp(&other.binding)
-    }
 }
 
 impl From<ButtonBinding> for AxisBindingButton {
@@ -125,7 +113,7 @@ pub enum MouseAxis {
     ScrollY,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AxisBindingKind {
     Mouse(MouseAxis),
     GamepadAxis(GamepadAxis),
@@ -134,107 +122,14 @@ pub enum AxisBindingKind {
         plus: Option<AxisBindingButton>,
         minus: Option<AxisBindingButton>,
     },
+    Mock(f32),
 }
 
-// impl AxisBindingKind {
-//     fn index(&self) -> u8 {
-//         match self {
-//             AxisBindingKind::Mouse(mouse_axis) => 0,
-//             AxisBindingKind::GamepadAxis(gamepad_axis) => 1,
-//             AxisBindingKind::GamepadButton(gamepad_button) => todo!(),
-//             AxisBindingKind::Buttons { plus, minus } => todo!(),
-//         }
-//     }
-// }
-
-fn stick_index(axis: &GamepadAxis) -> u8 {
-    match axis {
-        GamepadAxis::LeftStickX => 0,
-        GamepadAxis::LeftStickY => 1,
-        GamepadAxis::LeftZ => 2,
-        GamepadAxis::RightStickX => 3,
-        GamepadAxis::RightStickY => 4,
-        GamepadAxis::RightZ => 5,
-        GamepadAxis::Other(_) => 6,
-    }
-}
-impl PartialOrd for AxisBindingKind {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for AxisBindingKind {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self {
-            AxisBindingKind::Mouse(mouse_axis) => match other {
-                AxisBindingKind::Mouse(other_mouse_axis) => mouse_axis.cmp(other_mouse_axis),
-                AxisBindingKind::GamepadAxis(_)
-                | AxisBindingKind::GamepadButton(_)
-                | AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
-            },
-            AxisBindingKind::GamepadAxis(gamepad_axis) => match other {
-                AxisBindingKind::Mouse(_) => std::cmp::Ordering::Greater,
-                AxisBindingKind::GamepadAxis(other_gamepad_axis) => match gamepad_axis {
-                    GamepadAxis::Other(custom_axis) => {
-                        if let GamepadAxis::Other(other_custom_axis) = other_gamepad_axis {
-                            custom_axis.cmp(other_custom_axis)
-                        } else {
-                            std::cmp::Ordering::Greater
-                        }
-                    }
-                    _ => stick_index(gamepad_axis).cmp(&stick_index(other_gamepad_axis)),
-                },
-                AxisBindingKind::GamepadButton(_) | AxisBindingKind::Buttons { .. } => {
-                    std::cmp::Ordering::Less
-                }
-            },
-            AxisBindingKind::GamepadButton(gamepad_button) => match other {
-                AxisBindingKind::Mouse(_) | AxisBindingKind::GamepadAxis(_) => {
-                    std::cmp::Ordering::Greater
-                }
-                AxisBindingKind::GamepadButton(other_gamepad_button) => {
-                    gamepad_button.cmp(other_gamepad_button)
-                }
-                AxisBindingKind::Buttons { .. } => std::cmp::Ordering::Less,
-            },
-            AxisBindingKind::Buttons { plus, minus } => match other {
-                AxisBindingKind::Mouse(_)
-                | AxisBindingKind::GamepadAxis(_)
-                | AxisBindingKind::GamepadButton(_) => std::cmp::Ordering::Greater,
-                AxisBindingKind::Buttons {
-                    plus: other_plus,
-                    minus: other_minus,
-                } => {
-                    let p = plus.cmp(other_plus);
-                    if matches!(p, std::cmp::Ordering::Equal) {
-                        minus.cmp(other_minus)
-                    } else {
-                        p
-                    }
-                }
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AxisBinding {
     kind: AxisBindingKind,
     mod_stack: Vec<AxisModifier>,
 }
-
-impl PartialOrd for AxisBinding {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.kind.partial_cmp(&other.kind)
-    }
-}
-
-impl Ord for AxisBinding {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.kind.cmp(&other.kind)
-    }
-}
-
 impl AxisBinding {
     pub fn clashables(&self) -> Vec<ClashableKind> {
         let mut out = Vec::default();
@@ -254,6 +149,7 @@ impl AxisBinding {
                     out.extend(m.binding.clashables());
                 }
             }
+            AxisBindingKind::Mock(_) =>{}
         }
         out
     }
