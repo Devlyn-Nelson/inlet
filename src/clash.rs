@@ -118,7 +118,7 @@ impl ClashSettings {
 
 // fn get_button_binding_lookups<T>(action_binding: ActionBinding<T>) {
 //     for (index, binding) in action_binding.bindings().iter().enumerate() {
-        
+
 //     }
 // }
 
@@ -187,30 +187,29 @@ impl ClashHandler {
         &self.settings
     }
     pub fn tick(&mut self) {
-        for c in self.clashables.values_mut() {
-            let new = if c.frame != self.frame {
-                if c.kind.is_none() {
+        for (clashable, state) in self.clashables.iter_mut() {
+            let new = if state.frame != self.frame {
+                if state.kind.is_none() {
                     None
                 } else {
                     Some(ClashStateKind::none())
                 }
-            } else {
-                if let ClashSettings::Buffered(duration) = &self.settings
-                    && let ClashStateKind::Buffered(start, len) = &c.kind
+            } else if let ClashSettings::Buffered(duration) = &self.settings
+                && let ClashStateKind::Buffered(start, len) = &state.kind
+            {
+                if let Some(d) = duration
+                    && start.elapsed() >= *d
                 {
-                    if let Some(d) = duration
-                        && start.elapsed() >= *d
-                    {
-                        Some(ClashStateKind::released(*len))
-                    } else {
-                        None
-                    }
+                    Some(ClashStateKind::released(*len))
                 } else {
                     None
                 }
+            } else {
+                None
             };
             if let Some(new) = new {
-                c.kind.replace(new);
+                bevy::log::info!("T{clashable:?}");
+                state.kind.replace(new);
             }
         }
         self.frame += 1;
@@ -268,7 +267,13 @@ impl ClashHandler {
                             None
                         }
                     }
-                    ClashStateKind::Released(_) => None,
+                    ClashStateKind::Released(len) => {
+                        if chord_length > *len {
+                            Some(ClashStateKind::released(chord_length))
+                        } else {
+                            None
+                        }
+                    }
                 }
             } else {
                 match &state.kind {
@@ -282,9 +287,11 @@ impl ClashHandler {
                 }
             };
             if let Some(new) = new_state {
+                bevy::log::info!("P{clashable:?}");
                 state.kind.replace(new);
             }
-            if state.frame != self.frame {
+            if pressed && state.frame != self.frame {
+                bevy::log::info!("+{clashable:?}");
                 state.frame = self.frame;
             }
             state.kind.allowed_to_take_input(chord_length)
