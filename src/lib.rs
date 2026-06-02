@@ -37,6 +37,59 @@ pub enum InputBinding<T> {
 }
 
 impl<T> InputBinding<T> {
+    pub fn mock_press(&mut self, pressed: bool) {
+        match self {
+            InputBinding::Action(action_binding) => action_binding.mock(pressed),
+            InputBinding::Value(value_binding) => value_binding.mock(pressed_to_value(pressed)),
+            InputBinding::DualValue(dual_value_binding) => {
+                dual_value_binding.mock_x(pressed_to_value(pressed));
+                dual_value_binding.mock_y(pressed_to_value(pressed));
+            }
+        }
+    }
+    pub fn mock_value(&mut self, value: f32) {
+        match self {
+            InputBinding::Action(action_binding) => {
+                action_binding.mock(value_to_press(value));
+            }
+            InputBinding::Value(value_binding) => value_binding.mock(value),
+            InputBinding::DualValue(dual_value_binding) => {
+                dual_value_binding.mock_x(value);
+                dual_value_binding.mock_y(value);
+            }
+        }
+    }
+    pub fn mock_x_value(&mut self, value: f32) {
+        match self {
+            InputBinding::Action(action_binding) => {
+                action_binding.mock(value_to_press(value));
+            }
+            InputBinding::Value(value_binding) => value_binding.mock(value),
+            InputBinding::DualValue(dual_value_binding) => {
+                dual_value_binding.mock_x(value);
+            }
+        }
+    }
+    pub fn mock_y_value(&mut self, value: f32) {
+        match self {
+            InputBinding::Action(action_binding) => {
+                action_binding.mock(value_to_press(value));
+            }
+            InputBinding::Value(value_binding) => value_binding.mock(value),
+            InputBinding::DualValue(dual_value_binding) => {
+                dual_value_binding.mock_y(value);
+            }
+        }
+    }
+    pub fn mock_clear(&mut self) {
+        match self {
+            InputBinding::Action(action_binding) => action_binding.mock_clear(),
+            InputBinding::Value(value_binding) => value_binding.mock_clear(),
+            InputBinding::DualValue(dual_value_binding) => {
+                dual_value_binding.mock_clear();
+            }
+        }
+    }
     pub fn clashables(&self) -> Vec<ClashableKind> {
         match self {
             InputBinding::Action(action_binding) => action_binding.clashables(),

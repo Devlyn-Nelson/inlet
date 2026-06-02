@@ -125,6 +125,12 @@ pub enum AxisBindingKind {
     Mock(f32),
 }
 
+impl AxisBindingKind {
+    pub fn is_mock(&self) -> bool {
+        matches!(self, Self::Mock(_))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AxisBinding {
     kind: AxisBindingKind,
@@ -483,6 +489,18 @@ impl<T> ValueBinding<T> {
         self.mod_stack.push(modifier);
         self
     }
+    pub fn mock(&mut self, value: f32) {
+        for bind in self.bindings.iter_mut() {
+            if let AxisBindingKind::Mock(val) = &mut bind.kind {
+                *val = value;
+                return;
+            }
+        }
+        self.bindings.push(AxisBinding { kind: AxisBindingKind::Mock(value), mod_stack: Vec::default() });
+    }
+    pub fn mock_clear(&mut self) {
+        self.bindings.retain(|asdf| !asdf.kind.is_mock());
+    }
 }
 
 impl<T> From<GamepadAxis> for ValueBinding<T> {
@@ -603,6 +621,34 @@ impl<T> DualValueBinding<T> {
             x_state: ValueState::default(),
             y_state: ValueState::default(),
         }
+    }
+    pub fn mock_x(&mut self, value: f32) {
+        for bind in self.x_bindings.iter_mut() {
+            if let AxisBindingKind::Mock(val) = &mut bind.kind {
+                *val = value;
+                return;
+            }
+        }
+        self.x_bindings.push(AxisBinding { kind: AxisBindingKind::Mock(value), mod_stack: Vec::default() });
+    }
+    pub fn mock_y(&mut self, value: f32) {
+        for bind in self.y_bindings.iter_mut() {
+            if let AxisBindingKind::Mock(val) = &mut bind.kind {
+                *val = value;
+                return;
+            }
+        }
+        self.y_bindings.push(AxisBinding { kind: AxisBindingKind::Mock(value), mod_stack: Vec::default() });
+    }
+    pub fn mock_clear_x(&mut self) {
+        self.x_bindings.retain(|asdf| !asdf.kind.is_mock());
+    }
+    pub fn mock_clear_y(&mut self) {
+        self.y_bindings.retain(|asdf| !asdf.kind.is_mock());
+    }
+    pub fn mock_clear(&mut self) {
+        self.x_bindings.retain(|asdf| !asdf.kind.is_mock());
+        self.y_bindings.retain(|asdf| !asdf.kind.is_mock());
     }
 }
 

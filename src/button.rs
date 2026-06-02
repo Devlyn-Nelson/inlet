@@ -550,6 +550,18 @@ impl<T> ActionBinding<T> {
             None
         }
     }
+    pub fn mock(&mut self, pressed: bool) {
+        for bind in self.bindings.iter_mut() {
+            if let ButtonBinding::Mock(val) = bind {
+                *val = pressed;
+                return;
+            }
+        }
+        self.bindings.push(ButtonBinding::Mock(true));
+    }
+    pub fn mock_clear(&mut self) {
+        self.bindings.retain(|asdf| !asdf.is_mock());
+    }
 }
 
 impl<T> From<(ButtonBinding, ButtonEventBinding<T>)> for ActionBinding<T> {
