@@ -1,5 +1,6 @@
 - Interrupting Combos when an invalid button is pressed, with setting to disable interrupts.
 - fix unbuffered clashing. (Dedup Input Checks) could make this easier and better.
+- Add mock value bindings.
 
 # Maybe
 
