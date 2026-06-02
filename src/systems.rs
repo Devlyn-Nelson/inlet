@@ -56,6 +56,13 @@ pub fn gather_button_inputs<K, T>(
             Vec::new()
         };
         let mut maybe_clash = maybe_clash.as_mut().map(|asdf| asdf.as_mut());
+        // TODO figure out a way to do input binding sorting so non-buffered clash
+        // detection can work better.
+        //
+        // if maybe_clash.map(|c| c.settings().needs_sorting()).unwrap_or_default() {
+        //     for (key, binding) in bindings.bindings.iter() {
+        //     }
+        // }else{
         for bind in bindings.bindings.values_mut() {
             match bind {
                 crate::InputBinding::Action(action_binding) => {
@@ -120,6 +127,7 @@ pub fn gather_button_inputs<K, T>(
                 }
             }
         }
+        // }
     }
 }
 
@@ -265,12 +273,20 @@ fn check_button_binding_pressed(
                     mouse,
                     accumulated_mouse_motion,
                     accumulated_mouse_scroll,
-                    maybe_clash,
+                    &mut None,
                     chord_length,
                 );
                 if !pressed {
                     out = false;
                     break;
+                }
+            }
+            if out && maybe_clash.is_some() {
+                for b in button_chord.bindings_mut() {
+                    if !check_button_clash(b, maybe_clash, true, chord_length) {
+                        out = false;
+                        break;
+                    }
                 }
             }
             out

@@ -24,6 +24,7 @@ pub enum ClashableKind {
 
 pub struct Clash {}
 
+#[derive(Debug)]
 enum ClashStateKind {
     None,
     Clashing(usize),
@@ -36,9 +37,36 @@ impl ClashStateKind {
         match self {
             ClashStateKind::None => true,
             ClashStateKind::Clashing(len) => chord_len == *len,
-            ClashStateKind::Buffered(_, len) => chord_len == *len,
+            ClashStateKind::Buffered(_, _) => false,
             ClashStateKind::Released(len) => chord_len == *len,
         }
+    }
+    fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+    fn none() -> Self {
+        // bevy::log::info!("clash::None");
+        Self::None
+    }
+    fn clashing(len: usize) -> Self {
+        // bevy::log::info!("clash::Clashing({len})");
+        Self::Clashing(len)
+    }
+    fn buffered(len: usize) -> Self {
+        // bevy::log::info!("clash::Buffered(new,{len})");
+        Self::Buffered(Instant::now(), len)
+    }
+    fn buffered_with_instant(len: usize, i: Instant) -> Self {
+        // bevy::log::info!("clash::Buffered(old,{len})");
+        Self::Buffered(i, len)
+    }
+    fn released(len: usize) -> Self {
+        // bevy::log::info!("clash::Released({len})");
+        Self::Released(len)
+    }
+    fn replace(&mut self, new: Self) {
+        bevy::log::info!("{self:?} -> {new:?}");
+        *self = new;
     }
 }
 
@@ -53,13 +81,80 @@ pub enum ClashSettings {
     /// the input during the previous frame if not all buttons were pressed in that frame. This will NOT
     /// buffer inputs meaning chords happen as they are pressed, but inputs with shorter chord lengths
     /// will be told to ignore.
-    LongestHeld,
+    Sorted,
     /// Waits for the highest-priority or longest chord to capture the input within a Duration. This will
     /// always skip the "JustPressed" tick because it wants to wait for the longest input. If the Duration
     /// from the initial press of the clash passes or the input is released: inputs with a chord length that
     /// matches the longest chord length of inputs that tried to gather the input.
     Buffered(Option<Duration>),
 }
+
+impl ClashSettings {
+    pub fn needs_sorting(&self) -> bool {
+        matches!(self, Self::Sorted)
+    }
+}
+
+// pub(crate) struct BindSort<K> {
+//     pub(crate) order: Vec<BindLookup<K>>
+// }
+
+// impl<K> BindSort<K> {
+//     pub(crate) fn new() -> Self {
+//         Self { order: Vec::default() }
+//     }
+//     pub(crate) fn update_list<K, T>(&mut self, map: &HashMap<K, InputBinding<T>>)where K:Clone {
+//         let new = Vec::default();
+//         for (key, value) in map {
+//             match &value {
+//                 InputBinding::Action(action_binding) => {
+//                 }
+//                 InputBinding::Value(value_binding) => todo!(),
+//                 InputBinding::DualValue(dual_value_binding) => todo!(),
+//             }
+//         }
+//     }
+// }
+
+// fn get_button_binding_lookups<T>(action_binding: ActionBinding<T>) {
+//     for (index, binding) in action_binding.bindings().iter().enumerate() {
+        
+//     }
+// }
+
+// fn get_axis_binding_lookups<T>(axis_binding: ValueBinding<T>) {
+//     for (index, binding) in axis_binding.bindings().iter().enumerate() {
+
+//     }
+// }
+
+// pub(crate) struct BindLookup<K> {
+//     chord_len: usize,
+//     /// Key in hte InputBindings
+//     key: K,
+//     /// Index of the binding within the InputBinding.
+//     index: usize,
+// }
+
+// impl<K> PartialEq for BindLookup<K> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.chord_len == other.chord_len
+//     }
+// }
+
+// impl<K> Eq for BindLookup<K> {}
+
+// impl<K> PartialOrd for BindLookup<K> {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
+
+// impl<K> Ord for BindLookup<K> {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         other.chord_len.cmp(&self.chord_len)
+//     }
+// }
 
 #[derive(Component)]
 pub struct ClashHandler {
@@ -75,7 +170,7 @@ impl Default for ClashHandler {
         Self {
             frame: 0,
             clashables: HashMap::default(),
-            settings: ClashSettings::LongestHeld,
+            settings: ClashSettings::Buffered(Some(Duration::from_millis(10))),
             should_rescan: true,
         }
     }
@@ -88,13 +183,17 @@ impl ClashHandler {
     pub fn signal_rescan(&mut self) {
         self.should_rescan = true;
     }
-    pub fn set_clash_settings(&mut self, settings: ClashSettings) {
-        self.settings = settings;
+    pub fn settings(&self) -> &ClashSettings {
+        &self.settings
     }
     pub fn tick(&mut self) {
         for c in self.clashables.values_mut() {
             let new = if c.frame != self.frame {
-                Some(ClashStateKind::None)
+                if c.kind.is_none() {
+                    None
+                } else {
+                    Some(ClashStateKind::none())
+                }
             } else {
                 if let ClashSettings::Buffered(duration) = &self.settings
                     && let ClashStateKind::Buffered(start, len) = &c.kind
@@ -102,7 +201,7 @@ impl ClashHandler {
                     if let Some(d) = duration
                         && start.elapsed() >= *d
                     {
-                        Some(ClashStateKind::Released(*len))
+                        Some(ClashStateKind::released(*len))
                     } else {
                         None
                     }
@@ -111,7 +210,7 @@ impl ClashHandler {
                 }
             };
             if let Some(new) = new {
-                c.kind = new;
+                c.kind.replace(new);
             }
         }
         self.frame += 1;
@@ -149,27 +248,22 @@ impl ClashHandler {
             let new_state = if pressed {
                 match &state.kind {
                     ClashStateKind::None => match self.settings {
-                        ClashSettings::LongestHeld => {
-                            bevy::log::info!("len -> {chord_length}");
-                            Some(ClashStateKind::Clashing(chord_length))
-                        }
-                        ClashSettings::Buffered(_) => {
-                            bevy::log::info!("len -> {chord_length}");
-                            Some(ClashStateKind::Buffered(Instant::now(), chord_length))
-                        }
+                        ClashSettings::Sorted => Some(ClashStateKind::clashing(chord_length)),
+                        ClashSettings::Buffered(_) => Some(ClashStateKind::buffered(chord_length)),
                     },
                     ClashStateKind::Clashing(len) => {
                         if chord_length > *len {
-                            bevy::log::info!("len -> {chord_length}");
-                            Some(ClashStateKind::Clashing(chord_length))
+                            Some(ClashStateKind::clashing(chord_length))
                         } else {
                             None
                         }
                     }
                     ClashStateKind::Buffered(instant, len) => {
                         if chord_length > *len {
-                            bevy::log::info!("len -> {chord_length}");
-                            Some(ClashStateKind::Buffered(*instant, chord_length))
+                            Some(ClashStateKind::buffered_with_instant(
+                                chord_length,
+                                *instant,
+                            ))
                         } else {
                             None
                         }
@@ -182,13 +276,13 @@ impl ClashHandler {
                         // not pressed or clashing.
                         None
                     }
-                    ClashStateKind::Clashing(len) => Some(ClashStateKind::Released(*len)),
-                    ClashStateKind::Buffered(_, len) => Some(ClashStateKind::Released(*len)),
+                    ClashStateKind::Clashing(_) => Some(ClashStateKind::none()),
+                    ClashStateKind::Buffered(_, len) => Some(ClashStateKind::released(*len)),
                     ClashStateKind::Released(_) => None,
                 }
             };
             if let Some(new) = new_state {
-                state.kind = new;
+                state.kind.replace(new);
             }
             if state.frame != self.frame {
                 state.frame = self.frame;
