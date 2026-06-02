@@ -77,15 +77,33 @@ struct ClashState {
 }
 
 pub enum ClashSettings {
-    /// The highest-priority or longest chord will capture the input. This means any shorter chord can get
-    /// the input during the previous frame if not all buttons were pressed in that frame. This will NOT
-    /// buffer inputs meaning chords happen as they are pressed, but inputs with shorter chord lengths
-    /// will be told to ignore.
+    /// This mode is a work in progress. Don't work correctly, you should use [`Self::Buffered`] until its fixed.
+    /// 
+    /// Does not buffer inputs, just detects clashes.
+    /// 
+    /// # Rules
+    /// 
+    /// - If a high priority binding captures a button, that button must be released before a lower priority
+    ///   binding can see it again.
+    /// 
+    /// # Warning
+    /// 
+    /// The sorting required for this to work is not done. So lower priority inputs may still get activated,
+    /// when they shouldn't, for a single frame.
     Sorted,
-    /// Waits for the highest-priority or longest chord to capture the input within a Duration. This will
-    /// always skip the "JustPressed" tick because it wants to wait for the longest input. If the Duration
-    /// from the initial press of the clash passes or the input is released: inputs with a chord length that
-    /// matches the longest chord length of inputs that tried to gather the input.
+    /// Buffers inputs that can clash until a timer runs out or unpressed.
+    /// 
+    /// # Rules
+    /// 
+    /// - An input will NEVER be active the first frame it is pressed. Because of this we don't need to sort
+    /// the order input bindings should be checked like [`Self::Sorted`].
+    /// - If a wait duration is provided the input will not be released to anyone until the button has been
+    ///   active for that long.
+    /// - If the timer runs out or the button is unpressed the binding will be released to all inputs with
+    ///   the maximum chord length polled during the Press but inactive period. If the button was unpressed
+    ///   to release the input it will stay active for 1 frame before going inactive.
+    /// - If a high priority binding captures a button, that button must be released before a lower priority
+    ///   binding can see it again.
     Buffered(Option<Duration>),
 }
 
