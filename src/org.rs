@@ -134,14 +134,6 @@ enum InputStateKind {
 }
 
 impl InputStateKind {
-    fn allowed_to_take_input(&self, chord_len: usize) -> bool {
-        match self {
-            InputStateKind::Unclashable | InputStateKind::Clashable => true,
-            InputStateKind::Clashing(len) => chord_len == *len,
-            InputStateKind::Buffered(_, _) => false,
-            InputStateKind::Released(len) => chord_len == *len,
-        }
-    }
     fn repoll(&self) -> bool {
         match self {
             InputStateKind::Unclashable | InputStateKind::Clashable => false,
@@ -150,45 +142,8 @@ impl InputStateKind {
             InputStateKind::Released(_) => false,
         }
     }
-    /// return of `None` mean you need to repoll after all bindings have polled.
-    fn make_output(&self, chord_len: usize, value: &InputValue) -> Option<InputValue> {
-        match self {
-            InputStateKind::Unclashable | InputStateKind::Clashable => Some(value.clone()),
-            InputStateKind::Clashing(len) => {
-                if chord_len == *len {
-                    None
-                } else {
-                    Some(InputValue::default())
-                }
-            }
-            InputStateKind::Buffered(_, _) => Some(InputValue::default()),
-            InputStateKind::Released(len) => {
-                if chord_len == *len {
-                    Some(value.clone())
-                } else {
-                    Some(InputValue::default())
-                }
-            }
-        }
-    }
-    fn force_output(&self, chord_len: usize, value: &InputValue) -> InputValue {
-        match self {
-            InputStateKind::Unclashable | InputStateKind::Clashable => value.clone(),
-            InputStateKind::Buffered(_, _) => InputValue::default(),
-            InputStateKind::Clashing(len) | InputStateKind::Released(len) => {
-                if chord_len == *len {
-                    value.clone()
-                } else {
-                    InputValue::default()
-                }
-            }
-        }
-    }
     fn is_clashable(&self) -> bool {
         matches!(self, Self::Clashable)
-    }
-    fn unclashable() -> Self {
-        Self::Unclashable
     }
     fn clashable() -> Self {
         Self::Clashable
@@ -561,8 +516,18 @@ impl InputHandler {
                     Outy::Value => {}
                     Outy::Repoll => {}
                 }
-                if state.kind.repoll() {
-                    repoll = Outy::Repoll;
+                match &state.kind {
+                    InputStateKind::Clashing(_) => {
+                        repoll = Outy::Repoll;
+                    }
+                    InputStateKind::Buffered(_, _) => {
+                        out = InputValue::default();
+                    }
+                    InputStateKind::Unclashable => todo!(),
+                    InputStateKind::Clashable => todo!(),
+                    InputStateKind::Released(len) => if chord_length < *len {
+                        out = InputValue::default();
+                    },
                 }
             }
         }
@@ -584,8 +549,16 @@ impl InputHandler {
                     first = false;
                     out = state.value.clone();
                 }
-                if !state.kind.allowed_to_take_input(clashable.len()) {
-                    return InputValue::default();
+                match &state.kind {
+                    InputStateKind::Buffered(_, _) => {
+                        return InputValue::default();
+                    }
+                    InputStateKind::Unclashable |
+                    InputStateKind::Clashable => {}
+                    InputStateKind::Clashing(len) |
+                    InputStateKind::Released(len) => if clashable.len() < *len {
+                        return InputValue::default();
+                    },
                 }
             }
         }
