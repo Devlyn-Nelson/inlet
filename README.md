@@ -3,7 +3,7 @@ Input library for Bevy Game Engine.
 # Features
 
 - Uses bevy_input internally, supports Keyboard, Gamepad, and Mouse.
-- Uses any `Hash + Eq` type for keying input types. 
+- Uses any `InputKey` type for keying input types. 
 - Can produce `Message`'s for common input events.
 - `InputBinding` lets you bind any axis or button to any axis or button like input.
   - `ActionBinding` has internal states to best represent button like behavior: JustPressed, Pressed, JustReleased, Released. Can also be used as digital (-1, 0, 1) axis.

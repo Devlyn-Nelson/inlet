@@ -10,7 +10,7 @@ use bevy::{
 
 use crate::{
     button::{ActionableState, ButtonBinding, ButtonState},
-    clash::ClashableKind,
+    org::{BevyButtonKind, BevyInputKind},
 };
 
 /// Allows you to customize the behavior of an axis.
@@ -115,20 +115,11 @@ pub enum MouseAxis {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AxisBindingKind {
-    Mouse(MouseAxis),
-    GamepadAxis(GamepadAxis),
-    GamepadButton(GamepadButton),
-    Buttons {
-        plus: Option<AxisBindingButton>,
-        minus: Option<AxisBindingButton>,
+    Single(BevyInputKind),
+    Double {
+        plus: Option<BevyInputKind>,
+        minus: Option<BevyInputKind>,
     },
-    Mock(f32),
-}
-
-impl AxisBindingKind {
-    pub fn is_mock(&self) -> bool {
-        matches!(self, Self::Mock(_))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -137,29 +128,21 @@ pub struct AxisBinding {
     mod_stack: Vec<AxisModifier>,
 }
 impl AxisBinding {
-    pub fn clashables(&self) -> Vec<ClashableKind> {
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         match &self.kind {
-            AxisBindingKind::Mouse(mouse_axis) => out.push(ClashableKind::MouseAxis(*mouse_axis)),
-            AxisBindingKind::GamepadAxis(gamepad_axis) => {
-                out.push(ClashableKind::GamepadAxis(*gamepad_axis))
-            }
-            AxisBindingKind::GamepadButton(gamepad_button) => {
-                out.push(ClashableKind::GamepadButton(*gamepad_button))
-            }
-            AxisBindingKind::Buttons { plus, minus } => {
+            AxisBindingKind::Double { plus, minus } => {
                 if let Some(p) = plus {
-                    out.extend(p.binding.clashables());
+                    out.push(*p);
                 }
                 if let Some(m) = minus {
-                    out.extend(m.binding.clashables());
+                    out.push(*m);
                 }
             }
-            AxisBindingKind::Mock(_) =>{}
+            AxisBindingKind::Single(bevy_input_kind) => out.push(*bevy_input_kind),
         }
         out
     }
-
     pub fn mods(&self) -> &[AxisModifier] {
         &self.mod_stack
     }
@@ -174,100 +157,100 @@ impl AxisBinding {
         &mut self.kind
     }
     pub fn keyboard_right_left() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Keyboard(KeyCode::ArrowRight).into()),
-            minus: Some(ButtonBinding::Keyboard(KeyCode::ArrowLeft).into()),
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::ArrowRight.into()),
+            minus: Some(KeyCode::ArrowLeft.into()),
         }
         .into()
     }
     pub fn keyboard_up_down() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Keyboard(KeyCode::ArrowUp).into()),
-            minus: Some(ButtonBinding::Keyboard(KeyCode::ArrowDown).into()),
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::ArrowUp.into()),
+            minus: Some(KeyCode::ArrowDown.into()),
         }
         .into()
     }
     pub fn keyboard_da() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Keyboard(KeyCode::KeyD).into()),
-            minus: Some(ButtonBinding::Keyboard(KeyCode::KeyA).into()),
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::KeyD.into()),
+            minus: Some(KeyCode::KeyA.into()),
         }
         .into()
     }
     pub fn keyboard_ws() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Keyboard(KeyCode::KeyW).into()),
-            minus: Some(ButtonBinding::Keyboard(KeyCode::KeyS).into()),
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::KeyW.into()),
+            minus: Some(KeyCode::KeyS.into()),
         }
         .into()
     }
     pub fn mouse_x_motion() -> Self {
-        AxisBindingKind::Mouse(MouseAxis::MotionX).into()
+        MouseAxis::MotionX.into()
     }
     pub fn mouse_y_motion() -> Self {
-        AxisBindingKind::Mouse(MouseAxis::MotionY).into()
+        MouseAxis::MotionY.into()
     }
     pub fn mouse_x_scroll() -> Self {
-        AxisBindingKind::Mouse(MouseAxis::ScrollX).into()
+        MouseAxis::ScrollX.into()
     }
     pub fn mouse_y_scroll() -> Self {
-        AxisBindingKind::Mouse(MouseAxis::ScrollY).into()
+        MouseAxis::ScrollY.into()
     }
     pub fn gamepad_right_stick_x() -> Self {
-        AxisBindingKind::GamepadAxis(GamepadAxis::RightStickX).into()
+        GamepadAxis::RightStickX.into()
     }
     pub fn gamepad_right_stick_y() -> Self {
-        AxisBindingKind::GamepadAxis(GamepadAxis::RightStickY).into()
+        GamepadAxis::RightStickY.into()
     }
     pub fn gamepad_left_stick_x() -> Self {
-        AxisBindingKind::GamepadAxis(GamepadAxis::LeftStickX).into()
+        GamepadAxis::LeftStickX.into()
     }
     pub fn gamepad_left_stick_y() -> Self {
-        AxisBindingKind::GamepadAxis(GamepadAxis::LeftStickY).into()
+        GamepadAxis::LeftStickY.into()
     }
     pub fn gamepad_dpad_right_left() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Gamepad(GamepadButton::DPadRight).into()),
-            minus: Some(ButtonBinding::Gamepad(GamepadButton::DPadLeft).into()),
+        AxisBindingKind::Double {
+            plus: Some(GamepadButton::DPadRight.into()),
+            minus: Some(GamepadButton::DPadLeft.into()),
         }
         .into()
     }
     pub fn gamepad_dpad_up_down() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Gamepad(GamepadButton::DPadUp).into()),
-            minus: Some(ButtonBinding::Gamepad(GamepadButton::DPadDown).into()),
+        AxisBindingKind::Double {
+            plus: Some(GamepadButton::DPadUp.into()),
+            minus: Some(GamepadButton::DPadDown.into()),
         }
         .into()
     }
     pub fn keyboard_plus_minus() -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(ButtonBinding::Keyboard(KeyCode::Equal).into()),
-            minus: Some(ButtonBinding::Keyboard(KeyCode::Minus).into()),
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::Equal.into()),
+            minus: Some(KeyCode::Minus.into()),
         }
         .into()
     }
-    pub fn buttons(plus: ButtonBinding, minus: ButtonBinding) -> Self {
-        AxisBindingKind::Buttons {
+    pub fn buttons(plus: BevyInputKind, minus: BevyInputKind) -> Self {
+        AxisBindingKind::Double {
             plus: Some(plus.into()),
             minus: Some(minus.into()),
         }
         .into()
     }
-    pub fn buttons_optional(plus: Option<ButtonBinding>, minus: Option<ButtonBinding>) -> Self {
-        AxisBindingKind::Buttons {
+    pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
+        AxisBindingKind::Double {
             plus: plus.map(|asdf| asdf.into()),
             minus: minus.map(|asdf| asdf.into()),
         }
         .into()
     }
     pub fn gamepad_axis(axis: GamepadAxis) -> Self {
-        AxisBindingKind::GamepadAxis(axis).into()
+        axis.into()
     }
     pub fn gamepad_button(axis: GamepadButton) -> Self {
-        AxisBindingKind::GamepadButton(axis).into()
+        axis.into()
     }
     pub fn mouse(axis: MouseAxis) -> Self {
-        AxisBindingKind::Mouse(axis).into()
+        axis.into()
     }
     pub fn invert(self) -> Self {
         self.with_modifier(AxisModifier::INVERT.clone())
@@ -301,21 +284,11 @@ impl From<AxisBindingKind> for AxisBinding {
     }
 }
 
-impl From<(AxisBindingButton, AxisBindingButton)> for AxisBinding {
-    fn from(value: (AxisBindingButton, AxisBindingButton)) -> Self {
-        AxisBindingKind::Buttons {
+impl From<(BevyInputKind, BevyInputKind)> for AxisBinding {
+    fn from(value: (BevyInputKind, BevyInputKind)) -> Self {
+        AxisBindingKind::Double {
             plus: Some(value.0),
             minus: Some(value.1),
-        }
-        .into()
-    }
-}
-
-impl From<(ButtonBinding, ButtonBinding)> for AxisBinding {
-    fn from(value: (ButtonBinding, ButtonBinding)) -> Self {
-        AxisBindingKind::Buttons {
-            plus: Some(value.0.into()),
-            minus: Some(value.1.into()),
         }
         .into()
     }
@@ -424,13 +397,14 @@ pub struct ValueBinding<T> {
     pub(crate) mod_stack: Vec<AxisModifier>,
     pub(crate) event: fn(f32) -> Option<T>,
     pub(crate) state: ValueState,
+    pub(crate) mock: Option<f32>,
 }
 
 impl<T> ValueBinding<T> {
-    pub fn clashables(&self) -> Vec<ClashableKind> {
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         for b in &self.bindings {
-            out.extend(b.clashables());
+            out.extend(b.input_kinds());
         }
         out
     }
@@ -463,6 +437,7 @@ impl<T> ValueBinding<T> {
             mod_stack,
             event,
             state: ValueState::default(),
+            mock: None,
         }
     }
     pub fn from_bindings(bindings: Vec<AxisBinding>) -> Self {
@@ -471,6 +446,7 @@ impl<T> ValueBinding<T> {
             mod_stack: vec![],
             event: no_event,
             state: ValueState::default(),
+            mock: None,
         }
     }
     pub fn from_binding(binding: AxisBinding) -> Self {
@@ -479,6 +455,7 @@ impl<T> ValueBinding<T> {
             mod_stack: vec![],
             event: no_event,
             state: ValueState::default(),
+            mock: None,
         }
     }
     pub fn with_event(mut self, event: fn(f32) -> Option<T>) -> Self {
@@ -490,16 +467,10 @@ impl<T> ValueBinding<T> {
         self
     }
     pub fn mock(&mut self, value: f32) {
-        for bind in self.bindings.iter_mut() {
-            if let AxisBindingKind::Mock(val) = &mut bind.kind {
-                *val = value;
-                return;
-            }
-        }
-        self.bindings.push(AxisBinding { kind: AxisBindingKind::Mock(value), mod_stack: Vec::default() });
+        self.mock = Some(value);
     }
     pub fn mock_clear(&mut self) {
-        self.bindings.retain(|asdf| !asdf.kind.is_mock());
+        self.mock = None;
     }
 }
 
@@ -545,15 +516,17 @@ pub struct DualValueBinding<T> {
     pub(crate) event: fn(Vec2) -> Option<T>,
     pub(crate) x_state: ValueState,
     pub(crate) y_state: ValueState,
+    pub(crate) x_mock: Option<f32>,
+    pub(crate) y_mock: Option<f32>,
 }
 impl<T> DualValueBinding<T> {
-    pub fn clashables(&self) -> Vec<ClashableKind> {
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         for b in &self.x_bindings {
-            out.extend(b.clashables());
+            out.extend(b.input_kinds());
         }
         for b in &self.y_bindings {
-            out.extend(b.clashables());
+            out.extend(b.input_kinds());
         }
         out
     }
@@ -609,6 +582,8 @@ impl<T> DualValueBinding<T> {
             event: no_event_dual,
             x_state: ValueState::default(),
             y_state: ValueState::default(),
+            x_mock: None,
+            y_mock: None,
         }
     }
     pub fn from_bindings(x: Vec<AxisBinding>, y: Vec<AxisBinding>) -> Self {
@@ -620,35 +595,25 @@ impl<T> DualValueBinding<T> {
             event: no_event_dual,
             x_state: ValueState::default(),
             y_state: ValueState::default(),
+            x_mock: None,
+            y_mock: None,
         }
     }
     pub fn mock_x(&mut self, value: f32) {
-        for bind in self.x_bindings.iter_mut() {
-            if let AxisBindingKind::Mock(val) = &mut bind.kind {
-                *val = value;
-                return;
-            }
-        }
-        self.x_bindings.push(AxisBinding { kind: AxisBindingKind::Mock(value), mod_stack: Vec::default() });
+        self.x_mock = Some(value);
     }
     pub fn mock_y(&mut self, value: f32) {
-        for bind in self.y_bindings.iter_mut() {
-            if let AxisBindingKind::Mock(val) = &mut bind.kind {
-                *val = value;
-                return;
-            }
-        }
-        self.y_bindings.push(AxisBinding { kind: AxisBindingKind::Mock(value), mod_stack: Vec::default() });
+        self.y_mock = Some(value);
     }
     pub fn mock_clear_x(&mut self) {
-        self.x_bindings.retain(|asdf| !asdf.kind.is_mock());
+        self.x_mock = None;
     }
     pub fn mock_clear_y(&mut self) {
-        self.y_bindings.retain(|asdf| !asdf.kind.is_mock());
+        self.y_mock = None;
     }
     pub fn mock_clear(&mut self) {
-        self.x_bindings.retain(|asdf| !asdf.kind.is_mock());
-        self.y_bindings.retain(|asdf| !asdf.kind.is_mock());
+        self.x_mock = None;
+        self.y_mock = None;
     }
 }
 

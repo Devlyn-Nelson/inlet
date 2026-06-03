@@ -10,12 +10,16 @@ use crate::{BindEvent, SimpleMessage, systems::gather_button_inputs};
 
 pub type InputManagementPluginSimple<K> = InputManagementPlugin<K, SimpleMessage>;
 
+pub trait InputKey: Hash + Eq + Clone {}
+
+impl<T> InputKey for T where T: Hash + Eq + Clone {}
+
 /// This will generate or load chunks based off the transforms of any entity with a [`ActiveChunkPosition`]
 /// component on them, a sphere of chunks will load around those positions with the [`ChunksSettings`] width.
 pub struct InputManagementPlugin<K, I>(PhantomData<K>, PhantomData<I>);
 impl<K, I> Plugin for InputManagementPlugin<K, I>
 where
-    K: Hash + Eq + Sync + Send + 'static,
+    K: InputKey + Sync + Send + 'static,
     I: BindEvent + Sync + Send + 'static,
 {
     fn build(&self, app: &mut bevy::prelude::App) {
@@ -26,7 +30,7 @@ where
 
 impl<K, I> InputManagementPlugin<K, I>
 where
-    K: Hash + Eq + Sync + Send + 'static,
+    K: InputKey + Sync + Send + 'static,
     I: BindEvent + Sync + Send + 'static,
 {
     #[must_use]
@@ -37,7 +41,7 @@ where
 
 impl<K, I> Default for InputManagementPlugin<K, I>
 where
-    K: Hash + Eq + Sync + Send + 'static,
+    K: InputKey + Sync + Send + 'static,
     I: BindEvent + Sync + Send + 'static,
 {
     fn default() -> Self {

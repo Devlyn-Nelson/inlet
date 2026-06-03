@@ -1,6 +1,7 @@
 pub mod axis;
 pub mod button;
-pub mod clash;
+// pub mod clash;
+pub mod org;
 mod plugins;
 mod systems;
 
@@ -18,7 +19,7 @@ use bevy::{
 use crate::{
     axis::{DualValueBinding, ValueBinding},
     button::ButtonState,
-    clash::ClashableKind,
+    org::BevyInputKind,
 };
 
 pub trait BindEvent: Message {}
@@ -90,11 +91,11 @@ impl<T> InputBinding<T> {
             }
         }
     }
-    pub fn clashables(&self) -> Vec<ClashableKind> {
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         match self {
-            InputBinding::Action(action_binding) => action_binding.clashables(),
-            InputBinding::Value(value_binding) => value_binding.clashables(),
-            InputBinding::DualValue(dual_value_binding) => dual_value_binding.clashables(),
+            InputBinding::Action(action_binding) => action_binding.input_kinds(),
+            InputBinding::Value(value_binding) => value_binding.input_kinds(),
+            InputBinding::DualValue(dual_value_binding) => dual_value_binding.input_kinds(),
         }
     }
     pub fn state(&self) -> ButtonState {

@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use std::time::{Duration, Instant};
 
 use bevy::{
@@ -8,33 +7,26 @@ use bevy::{
 
 use crate::{
     axis::{AxisBinding, ValueState},
-    clash::ClashableKind,
+    org::{BevyButtonKind, BevyInputKind},
 };
 
 /// A set of buttons that must all be pressed at once to be considered active.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ButtonChord {
-    actions: Vec<ButtonBinding>,
+    actions: Vec<BevyInputKind>,
 }
 
 impl ButtonChord {
+    pub fn bindings(&self) -> &[BevyInputKind] {
+        &self.actions
+    }
     pub fn len(&self) -> usize {
         self.actions.len()
     }
-    pub fn clashables(&self) -> Vec<ClashableKind> {
-        self.actions
-            .iter()
-            .flat_map(|asdf| asdf.clashables())
-            .dedup()
-            .collect()
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
+        self.actions.clone()
     }
-    pub fn bindings(&self) -> &[ButtonBinding] {
-        &self.actions
-    }
-    pub fn bindings_mut(&mut self) -> &mut [ButtonBinding] {
-        &mut self.actions
-    }
-    pub fn new(bindings: Vec<ButtonBinding>) -> Self {
+    pub fn new(bindings: Vec<BevyInputKind>) -> Self {
         Self { actions: bindings }
     }
 }
@@ -50,7 +42,7 @@ pub enum ButtonComboRules {
 /// A set of buttons that must all be pressed one after another to become active.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ButtonCombo {
-    actions: Vec<ButtonBinding>,
+    actions: Vec<BevyInputKind>,
     current_index: usize,
     last_hit: Instant,
     tolerance: Duration,
@@ -58,19 +50,18 @@ pub struct ButtonCombo {
 }
 
 impl ButtonCombo {
-    pub fn clashables(&self) -> Vec<ClashableKind> {
-        self.actions
-            .iter()
-            .flat_map(|asdf| asdf.clashables())
-            .dedup()
-            .collect()
+    pub fn bindings(&self) -> &[BevyInputKind] {
+        &self.actions
+    }
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
+        self.actions.clone()
     }
     pub fn rules(&self) -> ButtonComboRules {
         self.rules
     }
     /// Creates a new button combo bindings.
     pub fn new_with_tolerance(
-        bindings: Vec<ButtonBinding>,
+        bindings: Vec<BevyInputKind>,
         rules: ButtonComboRules,
         tolerance: Duration,
     ) -> Self {
@@ -87,17 +78,17 @@ impl ButtonCombo {
     }
     /// Creates a new button combo bindings with default [`ButtonComboRules`].
     pub fn new_with_tolerance_default_rules(
-        bindings: Vec<ButtonBinding>,
+        bindings: Vec<BevyInputKind>,
         tolerance: Duration,
     ) -> Self {
         Self::new_with_tolerance(bindings, ButtonComboRules::default(), tolerance)
     }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new(bindings: Vec<ButtonBinding>, rules: ButtonComboRules) -> Self {
+    pub fn new(bindings: Vec<BevyInputKind>, rules: ButtonComboRules) -> Self {
         Self::new_with_tolerance(bindings, rules, Duration::from_millis(250))
     }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new_default_rules(bindings: Vec<ButtonBinding>) -> Self {
+    pub fn new_default_rules(bindings: Vec<BevyInputKind>) -> Self {
         Self::new_with_tolerance(
             bindings,
             ButtonComboRules::default(),
@@ -123,7 +114,7 @@ impl ButtonCombo {
     /// # Warning
     ///
     /// If the timer between expected presses ran out, it will return the first binding.
-    pub fn expected_binding(&self) -> &ButtonBinding {
+    pub fn expected_binding(&self) -> &BevyInputKind {
         let i = if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
             0
         } else {
@@ -133,7 +124,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding after [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the last
     /// binding to expect.
-    pub fn next_binding(&self) -> Option<&ButtonBinding> {
+    pub fn next_binding(&self) -> Option<&BevyInputKind> {
         let i = self.current_index + 1;
         if i == self.actions.len() {
             None
@@ -143,7 +134,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding before [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the first
     /// binding to expect.
-    pub fn previous_binding(&self) -> Option<&ButtonBinding> {
+    pub fn previous_binding(&self) -> Option<&BevyInputKind> {
         if self.current_index == 0 {
             None
         } else {
@@ -158,7 +149,7 @@ impl ButtonCombo {
     ///
     /// If the duration between the last time `self.hit()` and the call of this function is greater than `self.tolerance`
     /// the combo will reset to the beginning of the combo.
-    pub fn expected_binding_mut(&mut self) -> &mut ButtonBinding {
+    pub fn expected_binding_mut(&mut self) -> &mut BevyInputKind {
         if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
             self.current_index = 0;
         }
@@ -166,7 +157,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding after [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the last
     /// binding to expect.
-    pub fn next_binding_mut(&mut self) -> Option<&mut ButtonBinding> {
+    pub fn next_binding_mut(&mut self) -> Option<&mut BevyInputKind> {
         let i = self.current_index + 1;
         if i == self.actions.len() {
             None
@@ -176,7 +167,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding before [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the first
     /// binding to expect.
-    pub fn previous_binding_mut(&mut self) -> Option<&mut ButtonBinding> {
+    pub fn previous_binding_mut(&mut self) -> Option<&mut BevyInputKind> {
         if self.current_index == 0 {
             None
         } else {
@@ -205,60 +196,37 @@ pub enum ButtonBinding {
     Chord(ButtonChord),
     /// A set of [`ButtonBinding`] that must be pressed one after another to become active.
     Combo(ButtonCombo),
-    /// A [`KeyCode`] that will be checked from `bevy_input`.
-    Keyboard(KeyCode),
-    /// A [`MouseButton`] that will be checked from `bevy_input`.
-    Mouse(MouseButton),
-    /// A [`GamepadButton`] that will be checked from `bevy_input`.
-    Gamepad(GamepadButton),
-    /// An [`AxisBinding`] that will be interpreted as a button. A value of 0 is Released otherwise it is Pressed.
-    Axis(Box<AxisBinding>),
-    /// Contains a mock input value. Must be set.
-    Mock(bool),
+    /// standard button from bevy inputs
+    Single(BevyInputKind),
 }
 
 impl ButtonBinding {
-    pub fn clashables(&self) -> Vec<ClashableKind> {
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::with_capacity(1);
         match self {
-            ButtonBinding::Chord(button_chord) => out.extend(button_chord.clashables()),
-            ButtonBinding::Combo(button_combo) => out.extend(button_combo.clashables()),
-            ButtonBinding::Keyboard(key_code) => out.push(ClashableKind::Keyboard(*key_code)),
-            ButtonBinding::Mouse(mouse_button) => {
-                out.push(ClashableKind::MouseButton(*mouse_button))
-            }
-            ButtonBinding::Gamepad(gamepad_button) => {
-                out.push(ClashableKind::GamepadButton(*gamepad_button))
-            }
-            ButtonBinding::Axis(axis_binding) => {
-                out.extend(axis_binding.clashables());
-            }
-            ButtonBinding::Mock(_) => {
-                // No bindings to clash with.
-            }
+            ButtonBinding::Chord(button_chord) => out.extend(button_chord.input_kinds()),
+            ButtonBinding::Combo(button_combo) => out.extend(button_combo.input_kinds()),
+            ButtonBinding::Single(input) => out.push(input.clone()),
         }
         out
-    }
-    pub fn is_mock(&self) -> bool {
-        matches!(self, Self::Mock(_))
     }
 }
 
 impl From<KeyCode> for ButtonBinding {
     fn from(value: KeyCode) -> Self {
-        ButtonBinding::Keyboard(value)
+        ButtonBinding::Single(value.into())
     }
 }
 
 impl From<MouseButton> for ButtonBinding {
     fn from(value: MouseButton) -> Self {
-        ButtonBinding::Mouse(value)
+        ButtonBinding::Single(value.into())
     }
 }
 
 impl From<GamepadButton> for ButtonBinding {
     fn from(value: GamepadButton) -> Self {
-        ButtonBinding::Gamepad(value)
+        ButtonBinding::Single(value.into())
     }
 }
 
@@ -274,9 +242,9 @@ impl From<ButtonChord> for ButtonBinding {
     }
 }
 
-impl From<AxisBinding> for ButtonBinding {
-    fn from(value: AxisBinding) -> Self {
-        ButtonBinding::Axis(Box::new(value))
+impl From<BevyInputKind> for ButtonBinding {
+    fn from(value: BevyInputKind) -> Self {
+        Self::Single(value)
     }
 }
 
@@ -462,13 +430,14 @@ pub struct ActionBinding<T> {
     pub(crate) bindings: Vec<ButtonBinding>,
     pub(crate) event: ButtonEventBinding<T>,
     pub(crate) state: ButtonState,
+    pub(crate) mocked: bool,
 }
 
 impl<T> ActionBinding<T> {
-    pub fn clashables(&self) -> Vec<ClashableKind> {
+    pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         for b in &self.bindings {
-            out.extend(b.clashables());
+            out.extend(b.input_kinds());
         }
         out
     }
@@ -522,6 +491,7 @@ impl<T> ActionBinding<T> {
             bindings,
             event,
             state: ButtonState::default(),
+            mocked: false,
         }
     }
     pub fn new_no_event(bindings: Vec<ButtonBinding>) -> Self {
@@ -529,6 +499,7 @@ impl<T> ActionBinding<T> {
             bindings,
             event: ButtonEventBinding::None,
             state: ButtonState::default(),
+            mocked: false,
         }
     }
 
@@ -551,16 +522,10 @@ impl<T> ActionBinding<T> {
         }
     }
     pub fn mock(&mut self, pressed: bool) {
-        for bind in self.bindings.iter_mut() {
-            if let ButtonBinding::Mock(val) = bind {
-                *val = pressed;
-                return;
-            }
-        }
-        self.bindings.push(ButtonBinding::Mock(true));
+        self.mocked = pressed;
     }
     pub fn mock_clear(&mut self) {
-        self.bindings.retain(|asdf| !asdf.is_mock());
+        self.mocked = false;
     }
 }
 
@@ -578,19 +543,19 @@ impl<T> From<ButtonBinding> for ActionBinding<T> {
 
 impl<T> From<KeyCode> for ActionBinding<T> {
     fn from(value: KeyCode) -> Self {
-        ActionBinding::new_no_event(vec![ButtonBinding::Keyboard(value)])
+        ActionBinding::new_no_event(vec![ButtonBinding::Single(value.into())])
     }
 }
 
 impl<T> From<MouseButton> for ActionBinding<T> {
     fn from(value: MouseButton) -> Self {
-        ActionBinding::new_no_event(vec![ButtonBinding::Mouse(value)])
+        ActionBinding::new_no_event(vec![ButtonBinding::Single(value.into())])
     }
 }
 
 impl<T> From<GamepadButton> for ActionBinding<T> {
     fn from(value: GamepadButton) -> Self {
-        ActionBinding::new_no_event(vec![ButtonBinding::Gamepad(value)])
+        ActionBinding::new_no_event(vec![ButtonBinding::Single(value.into())])
     }
 }
 
