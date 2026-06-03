@@ -1,4 +1,3 @@
-use std::hash::Hash;
 
 use bevy::{
     ecs::{entity::Entity, system::Commands},
@@ -13,9 +12,9 @@ use bevy::{
 
 use crate::{
     BindEvent, InputBindings,
-    axis::{AxisBinding, AxisBindingKind, ValueBinding, ValueState},
-    button::{ButtonBinding, ButtonState},
-    org::{BevyInputKind, InputHandler, InputValue}, plugins::InputKey,
+    axis::{AxisBinding, AxisBindingKind},
+    button::ButtonBinding,
+    org::{InputHandler, InputValue}, plugins::InputKey,
 };
 
 //TODO system that automatically detects gamepad connections and disconnection and tries to keep everyone connected.
@@ -198,7 +197,7 @@ fn check_axes(
                     None
                 };
                 if let (Some(p), Some(m)) = (p, m) {
-                    Some(InputValue::Value(p.get_value() - p.get_value()))
+                    Some(InputValue::Value(p.get_value() - m.get_value()))
                 } else {
                     None
                 }

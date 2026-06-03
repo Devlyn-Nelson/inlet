@@ -8,7 +8,7 @@ use bevy::{
     input::{
         ButtonInput,
         gamepad::{Gamepad, GamepadAxis, GamepadButton},
-        keyboard::{Key, KeyCode},
+        keyboard::KeyCode,
         mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseButton},
     },
     platform::collections::{HashMap, hash_map::Entry},

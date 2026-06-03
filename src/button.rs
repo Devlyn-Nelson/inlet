@@ -6,8 +6,8 @@ use bevy::{
 };
 
 use crate::{
-    axis::{AxisBinding, ValueState},
-    org::{BevyButtonKind, BevyInputKind},
+    axis::ValueState,
+    org::BevyInputKind,
 };
 
 /// A set of buttons that must all be pressed at once to be considered active.

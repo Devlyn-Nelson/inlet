@@ -10,7 +10,7 @@ use bevy::{
 
 use crate::{
     button::{ActionableState, ButtonBinding, ButtonState},
-    org::{BevyButtonKind, BevyInputKind},
+    org::BevyInputKind,
 };
 
 /// Allows you to customize the behavior of an axis.
