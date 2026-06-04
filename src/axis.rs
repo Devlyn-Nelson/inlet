@@ -122,6 +122,123 @@ pub enum AxisBindingKind {
     },
 }
 
+impl AxisBindingKind {
+    pub fn keyboard_right_left() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::ArrowRight.into()),
+            minus: Some(KeyCode::ArrowLeft.into()),
+        }
+    }
+    pub fn keyboard_up_down() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::ArrowUp.into()),
+            minus: Some(KeyCode::ArrowDown.into()),
+        }
+    }
+    pub fn keyboard_da() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::KeyD.into()),
+            minus: Some(KeyCode::KeyA.into()),
+        }
+    }
+    pub fn keyboard_ws() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::KeyW.into()),
+            minus: Some(KeyCode::KeyS.into()),
+        }
+    }
+    pub fn mouse_x_motion() -> Self {
+        MouseAxis::MotionX.into()
+    }
+    pub fn mouse_y_motion() -> Self {
+        MouseAxis::MotionY.into()
+    }
+    pub fn mouse_x_scroll() -> Self {
+        MouseAxis::ScrollX.into()
+    }
+    pub fn mouse_y_scroll() -> Self {
+        MouseAxis::ScrollY.into()
+    }
+    pub fn gamepad_right_stick_x() -> Self {
+        GamepadAxis::RightStickX.into()
+    }
+    pub fn gamepad_right_stick_y() -> Self {
+        GamepadAxis::RightStickY.into()
+    }
+    pub fn gamepad_left_stick_x() -> Self {
+        GamepadAxis::LeftStickX.into()
+    }
+    pub fn gamepad_left_stick_y() -> Self {
+        GamepadAxis::LeftStickY.into()
+    }
+    pub fn gamepad_dpad_right_left() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(GamepadButton::DPadRight.into()),
+            minus: Some(GamepadButton::DPadLeft.into()),
+        }
+    }
+    pub fn gamepad_dpad_up_down() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(GamepadButton::DPadUp.into()),
+            minus: Some(GamepadButton::DPadDown.into()),
+        }
+    }
+    pub fn keyboard_plus_minus() -> Self {
+        AxisBindingKind::Double {
+            plus: Some(KeyCode::Equal.into()),
+            minus: Some(KeyCode::Minus.into()),
+        }
+    }
+    pub fn buttons(plus: BevyInputKind, minus: BevyInputKind) -> Self {
+        AxisBindingKind::Double {
+            plus: Some(plus.into()),
+            minus: Some(minus.into()),
+        }
+    }
+    pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
+        AxisBindingKind::Double {
+            plus: plus.map(|asdf| asdf.into()),
+            minus: minus.map(|asdf| asdf.into()),
+        }
+    }
+    pub fn gamepad_axis(axis: GamepadAxis) -> Self {
+        axis.into()
+    }
+    pub fn gamepad_button(axis: GamepadButton) -> Self {
+        axis.into()
+    }
+    pub fn mouse(axis: MouseAxis) -> Self {
+        axis.into()
+    }
+}
+
+impl From<GamepadAxis> for AxisBindingKind {
+    fn from(value: GamepadAxis) -> Self {
+        Self::gamepad_axis(value)
+    }
+}
+
+impl From<GamepadButton> for AxisBindingKind {
+    fn from(value: GamepadButton) -> Self {
+        Self::gamepad_button(value)
+    }
+}
+
+impl From<MouseAxis> for AxisBindingKind {
+    fn from(value: MouseAxis) -> Self {
+        Self::mouse(value)
+    }
+}
+
+impl From<(BevyInputKind, BevyInputKind)> for AxisBindingKind {
+    fn from(value: (BevyInputKind, BevyInputKind)) -> Self {
+        AxisBindingKind::Double {
+            plus: Some(value.0),
+            minus: Some(value.1),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AxisBinding {
     kind: AxisBindingKind,
@@ -157,32 +274,16 @@ impl AxisBinding {
         &mut self.kind
     }
     pub fn keyboard_right_left() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(KeyCode::ArrowRight.into()),
-            minus: Some(KeyCode::ArrowLeft.into()),
-        }
-        .into()
+        AxisBindingKind::keyboard_right_left().into()
     }
     pub fn keyboard_up_down() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(KeyCode::ArrowUp.into()),
-            minus: Some(KeyCode::ArrowDown.into()),
-        }
-        .into()
+        AxisBindingKind::keyboard_up_down().into()
     }
     pub fn keyboard_da() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(KeyCode::KeyD.into()),
-            minus: Some(KeyCode::KeyA.into()),
-        }
-        .into()
+        AxisBindingKind::keyboard_da().into()
     }
     pub fn keyboard_ws() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(KeyCode::KeyW.into()),
-            minus: Some(KeyCode::KeyS.into()),
-        }
-        .into()
+        AxisBindingKind::keyboard_ws().into()
     }
     pub fn mouse_x_motion() -> Self {
         MouseAxis::MotionX.into()
@@ -209,32 +310,16 @@ impl AxisBinding {
         GamepadAxis::LeftStickY.into()
     }
     pub fn gamepad_dpad_right_left() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(GamepadButton::DPadRight.into()),
-            minus: Some(GamepadButton::DPadLeft.into()),
-        }
-        .into()
+        AxisBindingKind::gamepad_dpad_right_left().into()
     }
     pub fn gamepad_dpad_up_down() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(GamepadButton::DPadUp.into()),
-            minus: Some(GamepadButton::DPadDown.into()),
-        }
-        .into()
+        AxisBindingKind::gamepad_dpad_up_down().into()
     }
     pub fn keyboard_plus_minus() -> Self {
-        AxisBindingKind::Double {
-            plus: Some(KeyCode::Equal.into()),
-            minus: Some(KeyCode::Minus.into()),
-        }
-        .into()
+        AxisBindingKind::keyboard_plus_minus().into()
     }
     pub fn buttons(plus: BevyInputKind, minus: BevyInputKind) -> Self {
-        AxisBindingKind::Double {
-            plus: Some(plus.into()),
-            minus: Some(minus.into()),
-        }
-        .into()
+        AxisBindingKind::buttons(plus, minus).into()
     }
     pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
         AxisBindingKind::Double {

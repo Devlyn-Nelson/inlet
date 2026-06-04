@@ -1,4 +1,3 @@
-
 use bevy::{
     ecs::{entity::Entity, system::Commands},
     input::{
@@ -14,7 +13,8 @@ use crate::{
     BindEvent, InputBindings,
     axis::{AxisBinding, AxisBindingKind},
     button::ButtonBinding,
-    org::{InputHandler, InputValue}, plugins::InputKey,
+    org::{InputHandler, InputValue},
+    plugins::InputKey,
 };
 
 //TODO system that automatically detects gamepad connections and disconnection and tries to keep everyone connected.
@@ -107,7 +107,7 @@ pub fn gather_button_inputs<K, T>(
                         if let Some(event) = action_binding.feed_event(pressed) {
                             writer.write(event);
                         }
-                    } {
+                    } else {
                         repoll.push(Repoll {
                             key: key.clone(),
                             x_i: re,
@@ -118,7 +118,11 @@ pub fn gather_button_inputs<K, T>(
                     }
                 }
                 crate::InputBinding::Value(value_binding) => {
-                    match check_axes(&mut value_binding.bindings, input_handler, value_binding.mock) {
+                    match check_axes(
+                        &mut value_binding.bindings,
+                        input_handler,
+                        value_binding.mock,
+                    ) {
                         Ok(v) => {
                             if let Some(event) = value_binding.feed(v) {
                                 writer.write(event);
@@ -134,10 +138,18 @@ pub fn gather_button_inputs<K, T>(
                     }
                 }
                 crate::InputBinding::DualValue(dual_value_binding) => {
-                    let x = check_axes(&mut dual_value_binding.x_bindings, input_handler, dual_value_binding.x_mock);
-                    let y = check_axes(&mut dual_value_binding.y_bindings, input_handler, dual_value_binding.y_mock);
-                    
-                    match (x,y) {
+                    let x = check_axes(
+                        &mut dual_value_binding.x_bindings,
+                        input_handler,
+                        dual_value_binding.x_mock,
+                    );
+                    let y = check_axes(
+                        &mut dual_value_binding.y_bindings,
+                        input_handler,
+                        dual_value_binding.y_mock,
+                    );
+
+                    match (x, y) {
                         (Ok(x), Ok(y)) => {
                             let v = Vec2::new(x, y);
                             if let Some(event) = dual_value_binding.feed(v) {
@@ -145,13 +157,31 @@ pub fn gather_button_inputs<K, T>(
                             }
                         }
                         (Err((x, x_i)), Err((y, y_i))) => {
-                            repoll.push(Repoll { key: key.clone(), x: x.into(), x_i, y: y.into(), y_i });
+                            repoll.push(Repoll {
+                                key: key.clone(),
+                                x: x.into(),
+                                x_i,
+                                y: y.into(),
+                                y_i,
+                            });
                         }
                         (Err((x, x_i)), Ok(y)) => {
-                            repoll.push(Repoll { key: key.clone(), x: x.into(), x_i, y: y.into(), y_i: vec![] });
+                            repoll.push(Repoll {
+                                key: key.clone(),
+                                x: x.into(),
+                                x_i,
+                                y: y.into(),
+                                y_i: vec![],
+                            });
                         }
                         (Ok(x), Err((y, y_i))) => {
-                            repoll.push(Repoll { key: key.clone(), x: x.into(), x_i: vec![], y: y.into(), y_i });
+                            repoll.push(Repoll {
+                                key: key.clone(),
+                                x: x.into(),
+                                x_i: vec![],
+                                y: y.into(),
+                                y_i,
+                            });
                         }
                     }
                 }
@@ -164,7 +194,7 @@ pub fn gather_button_inputs<K, T>(
                         let mut pressed = false;
                         for index in r.x_i {
                             let button_binding = &action_binding.bindings[index];
-                            pressed |=  match button_binding {
+                            pressed |= match button_binding {
                                 ButtonBinding::Chord(button_chord) => {
                                     input_handler.repoll(button_chord.bindings())
                                 }
@@ -174,21 +204,37 @@ pub fn gather_button_inputs<K, T>(
                                 ButtonBinding::Single(bevy_input_kind) => {
                                     input_handler.repoll(&[*bevy_input_kind])
                                 }
-                            }.is_pressed();
+                            }
+                            .is_pressed();
                         }
                         if let Some(event) = action_binding.feed_event(pressed) {
                             writer.write(event);
                         }
                     }
                     crate::InputBinding::Value(value_binding) => {
-                        let v = re_check_axes(&value_binding.bindings, &r.x_i, r.x.get_value(), input_handler);
+                        let v = re_check_axes(
+                            &value_binding.bindings,
+                            &r.x_i,
+                            r.x.get_value(),
+                            input_handler,
+                        );
                         if let Some(event) = value_binding.feed(v) {
                             writer.write(event);
                         }
                     }
                     crate::InputBinding::DualValue(dual_value_binding) => {
-                        let x = re_check_axes(&dual_value_binding.x_bindings, &r.x_i, r.x.get_value(), input_handler);
-                        let y = re_check_axes(&dual_value_binding.y_bindings, &r.y_i, r.y.get_value(), input_handler);
+                        let x = re_check_axes(
+                            &dual_value_binding.x_bindings,
+                            &r.x_i,
+                            r.x.get_value(),
+                            input_handler,
+                        );
+                        let y = re_check_axes(
+                            &dual_value_binding.y_bindings,
+                            &r.y_i,
+                            r.y.get_value(),
+                            input_handler,
+                        );
                         if let Some(event) = dual_value_binding.feed(Vec2 { x, y }) {
                             writer.write(event);
                         }
@@ -213,7 +259,7 @@ fn check_axes(
     mock: Option<f32>,
 ) -> Result<f32, (f32, Vec<usize>)> {
     let mut re = Vec::default();
-    let (mut value,mut count) = if let Some(m) = mock {(m,1)}else{(0.,0)};
+    let (mut value, mut count) = if let Some(m) = mock { (m, 1) } else { (0., 0) };
     for (i, b) in bindings.iter_mut().enumerate() {
         let v = match b.kind() {
             AxisBindingKind::Single(bevy_input_kind) => handler.poll(&[*bevy_input_kind]),
@@ -230,7 +276,7 @@ fn check_axes(
                 };
                 if let (Some(p), Some(m)) = (p, m) {
                     Some(InputValue::Value(p - m))
-                }else{
+                } else {
                     None
                 }
             }
@@ -249,11 +295,10 @@ fn check_axes(
     let avg = value / (count as f32);
     if re.is_empty() {
         Ok(avg)
-    }else{
+    } else {
         Err((avg, re))
     }
 }
-
 
 fn re_check_axes(
     bindings: &[AxisBinding],
@@ -261,20 +306,22 @@ fn re_check_axes(
     mut value: f32,
     handler: &mut InputHandler,
 ) -> f32 {
-    let mut count = if value == 0. {0}else{1};
+    let mut count = if value == 0. { 0 } else { 1 };
     for i in indexes.iter() {
         let b = &bindings[*i];
         let v = match b.kind() {
-            AxisBindingKind::Single(bevy_input_kind) => handler.repoll(&[*bevy_input_kind]).get_value(),
+            AxisBindingKind::Single(bevy_input_kind) => {
+                handler.repoll(&[*bevy_input_kind]).get_value()
+            }
             AxisBindingKind::Double { plus, minus } => {
                 let p = if let Some(binding) = plus {
                     handler.repoll(&[*binding]).get_value()
-                }else{
+                } else {
                     0.
                 };
                 let m = if let Some(binding) = minus {
                     handler.repoll(&[*binding]).get_value()
-                }else{
+                } else {
                     0.
                 };
                 p - m
@@ -287,7 +334,7 @@ fn re_check_axes(
     }
     if count == 0 {
         0.
-    }else{
+    } else {
         value / (count as f32)
     }
 }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use inlet::{
     InputBindingsSimple, InputManagementPluginSimple,
-    axis::{AxisBinding, AxisModifier},
+    axis::AxisBinding,
     button::{ButtonChord, ButtonCombo},
 };
 
@@ -17,7 +17,7 @@ fn main() {
 }
 
 /// All of the different controls that exist. These are the keys to bindings.
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     Move,
     Zoom,
@@ -91,22 +91,6 @@ fn setup(
                         GamepadButton::DPadDown.into(),
                         GamepadButton::DPadRight.into(),
                         GamepadButton::DPadLeft.into(),
-                    ])
-                    .into(),
-                    // Up -> Down -> Right -> Left on joystick
-                    ButtonCombo::new_default_rules(vec![
-                        AxisBinding::gamepad_left_stick_y()
-                            .with_modifier(AxisModifier::POSITIVE_ONLY)
-                            .into(),
-                        AxisBinding::gamepad_left_stick_y()
-                            .with_modifier(AxisModifier::NEGATIVE_ONLY)
-                            .into(),
-                        AxisBinding::gamepad_left_stick_x()
-                            .with_modifier(AxisModifier::POSITIVE_ONLY)
-                            .into(),
-                        AxisBinding::gamepad_left_stick_x()
-                            .with_modifier(AxisModifier::NEGATIVE_ONLY)
-                            .into(),
                     ])
                     .into(),
                 ]

@@ -5,10 +5,7 @@ use bevy::{
     prelude::GamepadButton,
 };
 
-use crate::{
-    axis::ValueState,
-    org::BevyInputKind,
-};
+use crate::{axis::ValueState, org::BevyInputKind};
 
 /// A set of buttons that must all be pressed at once to be considered active.
 #[derive(Debug, Clone, PartialEq)]

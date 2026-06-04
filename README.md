@@ -21,7 +21,7 @@ Create a list of input bindings to be used as a key to register bindings and ret
 This type MUST implement `Hash + Clone + Eq`
 
 ```
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     Move,
     Zoom,
@@ -107,7 +107,7 @@ Also create a type that implements `Message`
 > Polling-Based bindings.
 
 ```
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     Grow,
     Shrink,

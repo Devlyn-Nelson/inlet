@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     ops::{Add, Sub},
     time::{Duration, Instant},
 };
@@ -14,9 +15,7 @@ use bevy::{
     platform::collections::{HashMap, hash_map::Entry},
 };
 
-use crate::{
-    InputBinding, axis::MouseAxis,  pressed_to_value, value_to_press,
-};
+use crate::{InputBinding, axis::MouseAxis, pressed_to_value, value_to_press};
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum BevyAxisKind {
@@ -150,8 +149,20 @@ impl InputStateKind {
         Self::Released(len)
     }
     fn replace(&mut self, new: Self) {
-        bevy::log::info!("{self:?} -> {new:?}");
+        bevy::log::info!("{self} -> {new}");
         *self = new;
+    }
+}
+
+impl Display for InputStateKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputStateKind::Unclashable => write!(f, "Unclashable"),
+            InputStateKind::Clashable => write!(f, "Clashable"),
+            InputStateKind::Clashing(len) => write!(f, "Clashing({len})"),
+            InputStateKind::Buffered(_, len) => write!(f, "Buffered({len})"),
+            InputStateKind::Released(len) => write!(f, "Released({len})"),
+        }
     }
 }
 
@@ -238,6 +249,7 @@ impl Sub for InputValue {
     }
 }
 
+#[derive(Debug, Default)]
 struct InputState {
     /// The last frame this was updated.
     frame: usize,
@@ -363,10 +375,10 @@ impl Default for InputHandler {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 enum Outy {
-    Start,
-    Value,
+    Hide,
+    Show,
     Repoll,
 }
 
@@ -381,9 +393,12 @@ impl InputHandler {
         &self.settings
     }
     pub fn tick(&mut self) {
-        for state in self.clashables.values_mut() {
+        for (c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
-                if matches!(state.kind, InputStateKind::Clashable | InputStateKind::Unclashable) {
+                if matches!(
+                    state.kind,
+                    InputStateKind::Clashable | InputStateKind::Unclashable
+                ) {
                     None
                 } else {
                     Some(InputStateKind::clashable())
@@ -404,6 +419,7 @@ impl InputHandler {
                 None
             };
             if let Some(new) = new {
+                bevy::log::info!("{c:?}");
                 state.kind.replace(new);
             }
         }
@@ -438,131 +454,135 @@ impl InputHandler {
         if clashable.len() == 0 {
             return Some(InputValue::default());
         }
-        let mut count = 1;
+        let mut pressed = true;
         for c in clashable.iter() {
-            if let Some(state) = self.clashables.get(c)
-                && state.value.is_pressed()
-            {
-                count += 1;
+            match self.clashables.entry(c.clone()) {
+                Entry::Occupied(o) => {
+                    if !o.get().value.is_pressed() {
+                        pressed = false;
+                        break;
+                    }
+                }
+                Entry::Vacant(v) => {
+                    bevy::log::warn!("received unregistered bevy input in manager.");
+                    v.insert(InputState {
+                        frame: self.frame,
+                        kind: InputStateKind::clashable(),
+                        value: InputValue::default(),
+                    });
+                }
             }
         }
-        if count != clashable.len() {
-            return Some(InputValue::default());
-        }
-        let mut repoll = Outy::Start;
-        let mut out = InputValue::default();
+        let mut repoll = if pressed { Outy::Show } else { Outy::Hide };
         let chord_length = clashable.len();
         for c in clashable.iter() {
-            if let Some(state) = self.clashables.get_mut(c) {
-                let new_state = if state.value.is_pressed() {
-                    match &state.kind {
-                        InputStateKind::Unclashable => None,
-                        InputStateKind::Clashable => match self.settings {
-                            ClashSettings::Unbuffered => {
-                                Some(InputStateKind::clashing(chord_length))
-                            }
-                            ClashSettings::Buffered(_) => {
-                                Some(InputStateKind::buffered(chord_length))
-                            }
-                        },
-                        InputStateKind::Clashing(len) => {
-                            if chord_length > *len {
-                                Some(InputStateKind::clashing(chord_length))
-                            } else {
-                                None
-                            }
-                        }
-                        InputStateKind::Buffered(instant, len) => {
-                            if chord_length > *len {
-                                Some(InputStateKind::buffered_with_instant(
-                                    chord_length,
-                                    *instant,
-                                ))
-                            } else {
-                                None
-                            }
-                        }
-                        InputStateKind::Released(len) => {
-                            if chord_length > *len {
-                                Some(InputStateKind::released(chord_length))
-                            } else {
-                                None
-                            }
-                        }
-                    }
-                } else {
-                    match &state.kind {
-                        InputStateKind::Released(_)
-                        | InputStateKind::Clashable
-                        | InputStateKind::Unclashable => {
-                            // not pressed or clashing.
+            // UNWRAP the first for loop pass should insure that all clashables are in the map.
+            let state = self.clashables.get_mut(c).unwrap();
+            let new_state = if pressed {
+                match &state.kind {
+                    InputStateKind::Unclashable => None,
+                    InputStateKind::Clashable => match self.settings {
+                        ClashSettings::Unbuffered => Some(InputStateKind::clashing(chord_length)),
+                        ClashSettings::Buffered(_) => Some(InputStateKind::buffered(chord_length)),
+                    },
+                    InputStateKind::Clashing(len) => {
+                        if chord_length > *len {
+                            Some(InputStateKind::clashing(chord_length))
+                        } else {
                             None
                         }
-                        InputStateKind::Clashing(_) => Some(InputStateKind::clashable()),
-                        InputStateKind::Buffered(_, len) => Some(InputStateKind::released(*len)),
                     }
-                };
-                if let Some(new) = new_state {
-                    state.kind.replace(new);
-                }
-                if state.value.is_pressed() && state.frame != self.frame {
-                    state.frame = self.frame;
-                }
-                match repoll {
-                    Outy::Start => {
-                        repoll = Outy::Value;
-                        out = state.value.clone();
+                    InputStateKind::Buffered(instant, len) => {
+                        if chord_length > *len {
+                            Some(InputStateKind::buffered_with_instant(
+                                chord_length,
+                                *instant,
+                            ))
+                        } else {
+                            None
+                        }
                     }
-                    Outy::Value => {}
-                    Outy::Repoll => {}
+                    InputStateKind::Released(len) => {
+                        if chord_length > *len {
+                            Some(InputStateKind::released(chord_length))
+                        } else {
+                            None
+                        }
+                    }
                 }
-                match &state.kind {
-                    InputStateKind::Clashing(_) => {
+            } else {
+                None
+            };
+            if let Some(new) = new_state {
+                bevy::log::info!("{c:?}");
+                state.kind.replace(new);
+            }
+            if pressed && state.frame != self.frame {
+                state.frame = self.frame;
+            }
+            match &state.kind {
+                InputStateKind::Clashing(_) => {
+                    if matches!(repoll, Outy::Show) {
                         repoll = Outy::Repoll;
                     }
-                    InputStateKind::Buffered(_, _) => {
-                        out = InputValue::default();
-                    }
-                    InputStateKind::Unclashable |
-                    InputStateKind::Clashable => {}
-                    InputStateKind::Released(len) => if chord_length < *len {
-                        out = InputValue::default();
-                    },
                 }
+                InputStateKind::Buffered(_, _) => {
+                    if matches!(repoll, Outy::Show | Outy::Repoll) {
+                        repoll = Outy::Hide;
+                    }
+                }
+                InputStateKind::Released(len) => {
+                    if *len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
+                        repoll = Outy::Hide;
+                    }
+                }
+                InputStateKind::Unclashable | InputStateKind::Clashable => {}
             }
         }
 
         match repoll {
-            Outy::Start | Outy::Value => Some(out),
-            Outy::Repoll => None,
+            Outy::Hide => Some(InputValue::default()),
+            Outy::Show => {
+                // UNWRAP the first for loop pass should insure that all clashables are in the map.
+                let val = self
+                    .clashables
+                    .get(&clashable[0])
+                    .map(|asdf| asdf.value.clone())
+                    .unwrap_or_default();
+                Some(val)
+            }
+            Outy::Repoll => {
+                bevy::log::info!("repoll");
+                None
+            }
         }
     }
     /// Only preforms a check of what input to use, does not preform any state changing.
     ///
     /// It is expected that this is only ever called on inputs that got a `None` from [`Self::poll`].
     pub(crate) fn repoll(&self, clashable: &[BevyInputKind]) -> InputValue {
-        let mut first = true;
-        let mut out = InputValue::default();
+        if clashable.len() == 0 {
+            return InputValue::default();
+        }
         for c in clashable.iter() {
             if let Some(state) = self.clashables.get(c) {
-                if first {
-                    first = false;
-                    out = state.value.clone();
-                }
                 match &state.kind {
-                    InputStateKind::Buffered(_, _) => {
+                    InputStateKind::Clashable | InputStateKind::Buffered(_, _) => {
                         return InputValue::default();
                     }
-                    InputStateKind::Unclashable |
-                    InputStateKind::Clashable => {}
-                    InputStateKind::Clashing(len) |
-                    InputStateKind::Released(len) => if clashable.len() < *len {
-                        return InputValue::default();
-                    },
+                    InputStateKind::Unclashable => {}
+                    InputStateKind::Clashing(len) | InputStateKind::Released(len) => {
+                        if clashable.len() != *len {
+                            return InputValue::default();
+                        }
+                    }
                 }
             }
         }
-        out
+        self.clashables
+            .get(&clashable[0])
+            .map(|asdf| asdf.value.clone())
+            .unwrap_or_default()
     }
     pub(crate) fn update(
         &mut self,

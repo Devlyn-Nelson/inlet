@@ -1,7 +1,5 @@
 use bevy::{color::palettes::basic, prelude::*};
-use inlet::{
-    InputBindingsSimple, InputManagementPluginSimple, button::ButtonChord,
-};
+use inlet::{InputBindingsSimple, InputManagementPluginSimple, button::ButtonChord};
 
 fn main() {
     App::new()
