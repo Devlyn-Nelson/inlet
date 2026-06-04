@@ -505,13 +505,8 @@ impl<T> ActionBinding<T> {
         &self.state
     }
 
-    /// Feeds the state of the binding.
-    pub fn feed(&mut self, pressed: bool) -> bool {
-        self.state.feed(pressed)
-    }
-
     /// Feeds the state of the binding and returns a `T` if configured to do so for the current state.
-    pub fn feed_event(&mut self, pressed: bool) -> Option<T> {
+    pub fn feed(&mut self, pressed: bool) -> Option<T> {
         if self.state.feed(pressed) {
             self.event.try_get_event(&self.state)
         } else {
@@ -609,6 +604,9 @@ pub enum ButtonEventBinding<T> {
 }
 
 impl<T> ButtonEventBinding<T> {
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
     pub fn try_get_event(&mut self, state: &ButtonState) -> Option<T> {
         match self {
             ButtonEventBinding::WhenPressed(event) => {

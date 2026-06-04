@@ -91,7 +91,23 @@ pub fn gather_button_inputs<K, T>(
                                 input_handler.poll(button_chord.bindings())
                             }
                             ButtonBinding::Combo(button_combo) => {
-                                input_handler.poll(button_combo.bindings())
+                                match input_handler.poll(&vec![*button_combo.expected_binding()]) {
+                                    Some(expected) => if expected.is_pressed() {
+                                        let prev = button_combo.previous_binding();
+                                        if let Some(p) = prev {
+                                            if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
+                                                Some(button_combo.hit().into())
+                                            }else{
+                                                Some(false.into())
+                                            }
+                                        }else{
+                                            Some(button_combo.hit().into())
+                                        }
+                                    }else{
+                                        Some(false.into())
+                                    },
+                                    None => None,
+                                }
                             }
                             ButtonBinding::Single(bevy_input_kind) => {
                                 input_handler.poll(&[*bevy_input_kind])
@@ -104,7 +120,7 @@ pub fn gather_button_inputs<K, T>(
                         }
                     }
                     if re.is_empty() {
-                        if let Some(event) = action_binding.feed_event(pressed) {
+                        if let Some(event) = action_binding.feed(pressed) {
                             writer.write(event);
                         }
                     } else {
@@ -193,13 +209,27 @@ pub fn gather_button_inputs<K, T>(
                     crate::InputBinding::Action(action_binding) => {
                         let mut pressed = false;
                         for index in r.x_i {
-                            let button_binding = &action_binding.bindings[index];
+                            let button_binding = &mut action_binding.bindings[index];
                             pressed |= match button_binding {
                                 ButtonBinding::Chord(button_chord) => {
                                     input_handler.repoll(button_chord.bindings())
                                 }
                                 ButtonBinding::Combo(button_combo) => {
-                                    input_handler.repoll(button_combo.bindings())
+                                    let expected = input_handler.repoll(&vec![*button_combo.expected_binding()]);
+                                    if expected.is_pressed() {
+                                        let prev = button_combo.previous_binding();
+                                        if let Some(p) = prev {
+                                            if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
+                                                button_combo.hit().into()
+                                            }else{
+                                                false.into()
+                                            }
+                                        }else{
+                                            button_combo.hit().into()
+                                        }
+                                    }else{
+                                        false.into()
+                                    }
                                 }
                                 ButtonBinding::Single(bevy_input_kind) => {
                                     input_handler.repoll(&[*bevy_input_kind])
@@ -207,7 +237,7 @@ pub fn gather_button_inputs<K, T>(
                             }
                             .is_pressed();
                         }
-                        if let Some(event) = action_binding.feed_event(pressed) {
+                        if let Some(event) = action_binding.feed(pressed) {
                             writer.write(event);
                         }
                     }
