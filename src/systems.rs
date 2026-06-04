@@ -292,7 +292,11 @@ fn check_axes(
             count += 1;
         }
     }
-    let avg = value / (count as f32);
+    let avg = if count == 0 {
+        0.
+    } else {
+        value / (count as f32)
+    };
     if re.is_empty() {
         Ok(avg)
     } else {

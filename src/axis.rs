@@ -202,13 +202,13 @@ impl AxisBindingKind {
         }
     }
     pub fn gamepad_axis(axis: GamepadAxis) -> Self {
-        axis.into()
+        Self::Single(axis.into())
     }
     pub fn gamepad_button(axis: GamepadButton) -> Self {
-        axis.into()
+        Self::Single(axis.into())
     }
     pub fn mouse(axis: MouseAxis) -> Self {
-        axis.into()
+        Self::Single(axis.into())
     }
 }
 
@@ -329,13 +329,16 @@ impl AxisBinding {
         .into()
     }
     pub fn gamepad_axis(axis: GamepadAxis) -> Self {
-        axis.into()
+        let kind: AxisBindingKind = axis.into();
+        kind.into()
     }
     pub fn gamepad_button(axis: GamepadButton) -> Self {
-        axis.into()
+        let kind: AxisBindingKind = axis.into();
+        kind.into()
     }
     pub fn mouse(axis: MouseAxis) -> Self {
-        axis.into()
+        let kind: AxisBindingKind = axis.into();
+        kind.into()
     }
     pub fn invert(self) -> Self {
         self.with_modifier(AxisModifier::INVERT.clone())

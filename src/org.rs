@@ -149,7 +149,6 @@ impl InputStateKind {
         Self::Released(len)
     }
     fn replace(&mut self, new: Self) {
-        bevy::log::info!("{self} -> {new}");
         *self = new;
     }
 }
@@ -419,7 +418,7 @@ impl InputHandler {
                 None
             };
             if let Some(new) = new {
-                bevy::log::info!("{c:?}");
+                bevy::log::debug!("{c:?}: {} -> {new}", state.kind);
                 state.kind.replace(new);
             }
         }
@@ -514,7 +513,7 @@ impl InputHandler {
                 None
             };
             if let Some(new) = new_state {
-                bevy::log::info!("{c:?}");
+                bevy::log::debug!("{c:?}: {} -> {new}", state.kind);
                 state.kind.replace(new);
             }
             if pressed && state.frame != self.frame {
