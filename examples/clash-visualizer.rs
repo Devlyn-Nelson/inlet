@@ -1,6 +1,6 @@
 use bevy::{color::palettes::basic, prelude::*};
 use inlet::{
-    InputBindingsSimple, InputManagementPluginSimple, button::ButtonChord, clash::ClashHandler,
+    InputBindingsSimple, InputManagementPluginSimple, button::ButtonChord,
 };
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
 }
 
 /// All of the different controls that exist. These are the keys to bindings.
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     One,
     Two,
@@ -40,7 +40,6 @@ fn setup(
 ) {
     commands.spawn((
         Camera2d,
-        ClashHandler::default(),
         InputBindingsSimple::<InputTypes>::new()
             .with_action_binding(InputTypes::One, KeyCode::KeyA.into())
             .with_action_binding(

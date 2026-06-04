@@ -134,17 +134,6 @@ enum InputStateKind {
 }
 
 impl InputStateKind {
-    fn repoll(&self) -> bool {
-        match self {
-            InputStateKind::Unclashable | InputStateKind::Clashable => false,
-            InputStateKind::Clashing(_) => true,
-            InputStateKind::Buffered(_, _) => false,
-            InputStateKind::Released(_) => false,
-        }
-    }
-    fn is_clashable(&self) -> bool {
-        matches!(self, Self::Clashable)
-    }
     fn clashable() -> Self {
         Self::Clashable
     }
@@ -161,6 +150,7 @@ impl InputStateKind {
         Self::Released(len)
     }
     fn replace(&mut self, new: Self) {
+        bevy::log::info!("{self:?} -> {new:?}");
         *self = new;
     }
 }
@@ -171,6 +161,16 @@ pub enum InputValue {
     Value(f32),
 }
 
+impl From<f32> for InputValue {
+    fn from(value: f32) -> Self {
+        Self::Value(value)
+    }
+}
+impl From<bool> for InputValue {
+    fn from(value: bool) -> Self {
+        Self::Pressed(value)
+    }
+}
 impl Default for InputValue {
     fn default() -> Self {
         Self::Pressed(false)
@@ -383,7 +383,7 @@ impl InputHandler {
     pub fn tick(&mut self) {
         for state in self.clashables.values_mut() {
             let new = if state.frame != self.frame {
-                if state.kind.is_clashable() {
+                if matches!(state.kind, InputStateKind::Clashable | InputStateKind::Unclashable) {
                     None
                 } else {
                     Some(InputStateKind::clashable())
@@ -523,8 +523,8 @@ impl InputHandler {
                     InputStateKind::Buffered(_, _) => {
                         out = InputValue::default();
                     }
-                    InputStateKind::Unclashable => todo!(),
-                    InputStateKind::Clashable => todo!(),
+                    InputStateKind::Unclashable |
+                    InputStateKind::Clashable => {}
                     InputStateKind::Released(len) => if chord_length < *len {
                         out = InputValue::default();
                     },

@@ -204,6 +204,7 @@ pub fn pressed_to_value(pressed: bool) -> f32 {
 }
 
 #[derive(Component)]
+#[require(crate::org::InputHandler)]
 pub struct InputBindings<K, T: BindEvent> {
     pub(crate) bindings: HashMap<K, InputBinding<T>>,
     pub(crate) assigned_gamepad: Option<Entity>,

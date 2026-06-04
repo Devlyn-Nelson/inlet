@@ -18,7 +18,7 @@ Input library for Bevy Game Engine.
 
 Create a list of input bindings to be used as a key to register bindings and retrieve values.
 
-This type MUST implement `Hash + PartialEq + Eq`
+This type MUST implement `Hash + Clone + Eq`
 
 ```
 #[derive(Hash, PartialEq, Eq)]
