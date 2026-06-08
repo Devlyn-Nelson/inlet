@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use inlet::{
     InputBindings, InputManagementPlugin,
     axis::AxisBinding,
-    button::{ButtonChord, ButtonCombo, ButtonEventBinding},
+    button::{BevyAxisButton, ButtonChord, ButtonCombo, ButtonEventBinding},
+    org::BevyAxisKind,
 };
 
 fn main() {
@@ -110,6 +111,17 @@ fn setup(
                             GamepadButton::DPadDown.into(),
                             GamepadButton::DPadRight.into(),
                             GamepadButton::DPadLeft.into(),
+                        ])
+                        .into(),
+                        ButtonChord::new(vec![
+                            BevyAxisButton::new_positive_only(GamepadAxis::LeftStickY.into())
+                                .into(),
+                            BevyAxisButton::new_negative_only(GamepadAxis::LeftStickY.into())
+                                .into(),
+                            BevyAxisButton::new_positive_only(GamepadAxis::LeftStickX.into())
+                                .into(),
+                            BevyAxisButton::new_negative_only(GamepadAxis::LeftStickX.into())
+                                .into(),
                         ])
                         .into(),
                     ],

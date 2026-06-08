@@ -9,7 +9,7 @@ use bevy::{
 };
 
 use crate::{
-    button::{ActionableState, ButtonBinding, ButtonState},
+    button::{ActionableState, ButtonBinding, ButtonBindingKind, ButtonState},
     org::BevyInputKind,
 };
 
@@ -116,33 +116,33 @@ pub enum MouseAxis {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AxisBindingKind {
     Single(BevyInputKind),
-    Double {
-        plus: Option<BevyInputKind>,
-        minus: Option<BevyInputKind>,
+    Buttons {
+        plus: Option<ButtonBindingKind>,
+        minus: Option<ButtonBindingKind>,
     },
 }
 
 impl AxisBindingKind {
     pub fn keyboard_right_left() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(KeyCode::ArrowRight.into()),
             minus: Some(KeyCode::ArrowLeft.into()),
         }
     }
     pub fn keyboard_up_down() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(KeyCode::ArrowUp.into()),
             minus: Some(KeyCode::ArrowDown.into()),
         }
     }
     pub fn keyboard_da() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(KeyCode::KeyD.into()),
             minus: Some(KeyCode::KeyA.into()),
         }
     }
     pub fn keyboard_ws() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(KeyCode::KeyW.into()),
             minus: Some(KeyCode::KeyS.into()),
         }
@@ -172,31 +172,31 @@ impl AxisBindingKind {
         GamepadAxis::LeftStickY.into()
     }
     pub fn gamepad_dpad_right_left() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(GamepadButton::DPadRight.into()),
             minus: Some(GamepadButton::DPadLeft.into()),
         }
     }
     pub fn gamepad_dpad_up_down() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(GamepadButton::DPadUp.into()),
             minus: Some(GamepadButton::DPadDown.into()),
         }
     }
     pub fn keyboard_plus_minus() -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(KeyCode::Equal.into()),
             minus: Some(KeyCode::Minus.into()),
         }
     }
     pub fn buttons(plus: BevyInputKind, minus: BevyInputKind) -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: Some(plus.into()),
             minus: Some(minus.into()),
         }
     }
     pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: plus.map(|asdf| asdf.into()),
             minus: minus.map(|asdf| asdf.into()),
         }
@@ -230,11 +230,20 @@ impl From<MouseAxis> for AxisBindingKind {
     }
 }
 
-impl From<(BevyInputKind, BevyInputKind)> for AxisBindingKind {
-    fn from(value: (BevyInputKind, BevyInputKind)) -> Self {
-        AxisBindingKind::Double {
+impl From<(ButtonBindingKind, ButtonBindingKind)> for AxisBindingKind {
+    fn from(value: (ButtonBindingKind, ButtonBindingKind)) -> Self {
+        AxisBindingKind::Buttons {
             plus: Some(value.0),
             minus: Some(value.1),
+        }
+    }
+}
+
+impl From<(BevyInputKind, BevyInputKind)> for AxisBindingKind {
+    fn from(value: (BevyInputKind, BevyInputKind)) -> Self {
+        AxisBindingKind::Buttons {
+            plus: Some(value.0.into()),
+            minus: Some(value.1.into()),
         }
     }
 }
@@ -248,12 +257,12 @@ impl AxisBinding {
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         match &self.kind {
-            AxisBindingKind::Double { plus, minus } => {
+            AxisBindingKind::Buttons { plus, minus } => {
                 if let Some(p) = plus {
-                    out.push(*p);
+                    out.push(p.kind());
                 }
                 if let Some(m) = minus {
-                    out.push(*m);
+                    out.push(m.kind());
                 }
             }
             AxisBindingKind::Single(bevy_input_kind) => out.push(*bevy_input_kind),
@@ -322,7 +331,7 @@ impl AxisBinding {
         AxisBindingKind::buttons(plus, minus).into()
     }
     pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
-        AxisBindingKind::Double {
+        AxisBindingKind::Buttons {
             plus: plus.map(|asdf| asdf.into()),
             minus: minus.map(|asdf| asdf.into()),
         }
@@ -374,9 +383,9 @@ impl From<AxisBindingKind> for AxisBinding {
 
 impl From<(BevyInputKind, BevyInputKind)> for AxisBinding {
     fn from(value: (BevyInputKind, BevyInputKind)) -> Self {
-        AxisBindingKind::Double {
-            plus: Some(value.0),
-            minus: Some(value.1),
+        AxisBindingKind::Buttons {
+            plus: Some(value.0.into()),
+            minus: Some(value.1.into()),
         }
         .into()
     }

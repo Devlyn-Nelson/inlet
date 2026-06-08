@@ -12,7 +12,17 @@ Input library for Bevy Game Engine.
 
 # Usage
 
-> see `examples/demo.rs` for a more complete control scheme.
+> see `examples/events.rs` to see most of what can be done.
+
+## Binding Types to be aware of
+
+- `BevyInputKind` which is and enum that is either `BevyAxisKind` or `BevyButtonKind`. Both inner types just resolve down to types from `bevy_input`.
+- `BevyAxisButton` this converts an axis to a button. 
+- `ButtonBinding` this what `inlet` uses as an actual binding to a button-like input. uses `BevyButtonKind` and `BevyAxisButton` to detect presses. 
+  - Can be configured to be a Chord (multiple buttons that must be pressed all at once).
+  - Can be configured to be a Combo (multiple buttons pressed one after another).
+- `AxisBinding` this what `inlet` uses as an actual binding to a axis-like input.
+
 
 ## Poll Only
 

@@ -15,11 +15,17 @@ use crate::{
     button::{ButtonBinding, ButtonCombo},
     org::{InputHandler, InputValue},
     plugins::InputKey,
+    pressed_to_value,
 };
 
 //TODO system that automatically detects gamepad connections and disconnection and tries to keep everyone connected.
 
-fn expected_is_pressed(button_combo: &mut ButtonCombo, input_handler : &mut Mut<InputHandler>) -> InputValue {
+/// This is for when a combos expected button is pressed. this will check the proper rules and check to
+/// verify them.
+fn expected_is_pressed(
+    button_combo: &mut ButtonCombo,
+    input_handler: &mut Mut<InputHandler>,
+) -> InputValue {
     match button_combo.rules() {
         crate::button::ButtonComboRules::None => button_combo.hit().into(),
         crate::button::ButtonComboRules::PreviousMustBeReleased => {
@@ -27,12 +33,15 @@ fn expected_is_pressed(button_combo: &mut ButtonCombo, input_handler : &mut Mut<
             // If a previous button exist check that it is released.
             if let Some(p) = prev {
                 // Either differ to re-poll or if previous is not pressed hit the combo.
-                if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
+                let b = vec![p.kind()];
+                if let Some(pre_asdf) = input_handler.poll(&b)
+                    && !p.apply(pre_asdf)
+                {
                     button_combo.hit().into()
-                }else{
+                } else {
                     false.into()
                 }
-            }else{
+            } else {
                 // No previous, hit because pressed.
                 button_combo.hit().into()
             }
@@ -42,12 +51,15 @@ fn expected_is_pressed(button_combo: &mut ButtonCombo, input_handler : &mut Mut<
             // If a next button exist check that it is released.
             if let Some(p) = next {
                 // Either differ to re-poll or if next is not pressed hit the combo.
-                if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
+                let b = vec![p.kind()];
+                if let Some(pre_asdf) = input_handler.poll(&b)
+                    && !p.apply(pre_asdf)
+                {
                     button_combo.hit().into()
-                }else{
+                } else {
                     false.into()
                 }
-            }else{
+            } else {
                 // No next, hit because pressed.
                 button_combo.hit().into()
             }
@@ -123,23 +135,32 @@ pub fn gather_button_inputs<K, T>(
                     let mut re = Vec::default();
                     for (i, button_binding) in action_binding.bindings.iter_mut().enumerate() {
                         let v = match button_binding {
-                            ButtonBinding::Chord(button_chord) => {
-                                input_handler.poll(button_chord.bindings())
-                            }
+                            ButtonBinding::Chord(button_chord) => input_handler
+                                .poll(&button_chord.input_kinds())
+                                .map(|v| button_chord.apply(v)),
                             ButtonBinding::Combo(button_combo) => {
                                 // Either differ to re-poll or check if the next expected button is pressed.
-                                input_handler.poll(&vec![*button_combo.expected_binding_mut()]).map(|expected| if expected.is_pressed() {
-                                        expected_is_pressed(button_combo, input_handler)
-                                    }else{
-                                        false.into()
-                                    })
+                                let expected = button_combo.expected_binding_mut();
+                                let out = input_handler.poll(&vec![expected.kind()]);
+                                if let Some(o) = out {
+                                    if expected.apply(o) {
+                                        Some(
+                                            expected_is_pressed(button_combo, input_handler)
+                                                .is_pressed(),
+                                        )
+                                    } else {
+                                        Some(false)
+                                    }
+                                } else {
+                                    None
+                                }
                             }
-                            ButtonBinding::Single(bevy_input_kind) => {
-                                input_handler.poll(&[*bevy_input_kind])
-                            }
+                            ButtonBinding::Single(bevy_input_kind) => input_handler
+                                .poll(&[bevy_input_kind.kind()])
+                                .map(|v| v.is_pressed()),
                         };
                         if let Some(p) = v {
-                            pressed |= p.is_pressed();
+                            pressed |= p;
                         } else {
                             re.push(i);
                         }
@@ -237,21 +258,24 @@ pub fn gather_button_inputs<K, T>(
                             let button_binding = &mut action_binding.bindings[index];
                             pressed |= match button_binding {
                                 ButtonBinding::Chord(button_chord) => {
-                                    input_handler.repoll(button_chord.bindings())
+                                    let out = input_handler.repoll(&button_chord.input_kinds());
+                                    button_chord.apply(out)
                                 }
                                 ButtonBinding::Combo(button_combo) => {
-                                    let expected = input_handler.repoll(&vec![*button_combo.expected_binding()]);
-                                    if expected.is_pressed() {
+                                    let b = button_combo.expected_binding_mut();
+                                    let out = input_handler.repoll(&vec![b.kind()]);
+                                    if b.apply(out) {
                                         expected_is_pressed(button_combo, input_handler)
-                                    }else{
-                                        false.into()
+                                            .is_pressed()
+                                    } else {
+                                        false
                                     }
                                 }
                                 ButtonBinding::Single(bevy_input_kind) => {
-                                    input_handler.repoll(&[*bevy_input_kind])
+                                    let b = vec![bevy_input_kind.kind()];
+                                    input_handler.repoll(&b).is_pressed()
                                 }
-                            }
-                            .is_pressed();
+                            };
                         }
                         if let Some(event) = action_binding.feed(pressed) {
                             writer.write(event);
@@ -309,14 +333,18 @@ fn check_axes(
     for (i, b) in bindings.iter_mut().enumerate() {
         let v = match b.kind() {
             AxisBindingKind::Single(bevy_input_kind) => handler.poll(&[*bevy_input_kind]),
-            AxisBindingKind::Double { plus, minus } => {
-                let p = if let Some(p) = plus {
-                    handler.poll(&[*p]).map(|val| val.get_value())
+            AxisBindingKind::Buttons { plus, minus } => {
+                let p = if let Some(binding) = plus {
+                    handler
+                        .poll(&[binding.kind()])
+                        .map(|out| pressed_to_value(binding.apply(out)))
                 } else {
                     Some(0.)
                 };
-                let m = if let Some(m) = minus {
-                    handler.poll(&[*m]).map(|val| val.get_value())
+                let m = if let Some(binding) = minus {
+                    handler
+                        .poll(&[binding.kind()])
+                        .map(|out| pressed_to_value(binding.apply(out)))
                 } else {
                     Some(0.)
                 };
@@ -363,14 +391,16 @@ fn re_check_axes(
             AxisBindingKind::Single(bevy_input_kind) => {
                 handler.repoll(&[*bevy_input_kind]).get_value()
             }
-            AxisBindingKind::Double { plus, minus } => {
+            AxisBindingKind::Buttons { plus, minus } => {
                 let p = if let Some(binding) = plus {
-                    handler.repoll(&[*binding]).get_value()
+                    let out = handler.repoll(&[binding.kind()]);
+                    pressed_to_value(binding.apply(out))
                 } else {
                     0.
                 };
                 let m = if let Some(binding) = minus {
-                    handler.repoll(&[*binding]).get_value()
+                    let out = handler.repoll(&[binding.kind()]);
+                    pressed_to_value(binding.apply(out))
                 } else {
                     0.
                 };

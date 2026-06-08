@@ -5,26 +5,167 @@ use bevy::{
     prelude::GamepadButton,
 };
 
-use crate::{axis::ValueState, org::BevyInputKind};
+use crate::{
+    axis::ValueState,
+    org::{BevyAxisKind, BevyButtonKind, BevyInputKind, InputValue},
+    value_to_press,
+};
+#[allow(unpredictable_function_pointer_comparisons)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BevyAxisButton {
+    axis: BevyAxisKind,
+    is_pressed_fn: fn(f32) -> bool,
+}
+
+impl BevyAxisButton {
+    /// Returns a new `BevyAxisButton` where zero is unpressed and any other value is pressed.
+    pub fn new_standard(axis: BevyAxisKind) -> Self {
+        Self {
+            axis,
+            is_pressed_fn: value_to_press,
+        }
+    }
+    /// Returns a new `BevyAxisButton` with a custom function for mapping axis values to button pressed.
+    pub fn new_custom(axis: BevyAxisKind, is_pressed_fn: fn(f32) -> bool) -> Self {
+        Self {
+            axis,
+            is_pressed_fn,
+        }
+    }
+    /// Returns a new `BevyAxisButton` where negative values are pressed otherwise unpressed.
+    pub fn new_negative_only(axis: BevyAxisKind) -> Self {
+        Self {
+            axis,
+            is_pressed_fn: f32::is_sign_negative,
+        }
+    }
+    /// Returns a new `BevyAxisButton` where positive non-zero values are pressed otherwise unpressed.
+    pub fn new_positive_only(axis: BevyAxisKind) -> Self {
+        Self {
+            axis,
+            is_pressed_fn: positive_only,
+        }
+    }
+    pub(crate) fn apply(&self, value: InputValue) -> bool {
+        (self.is_pressed_fn)(value.get_value())
+    }
+}
+
+impl From<GamepadButton> for BevyAxisButton {
+    fn from(value: GamepadButton) -> Self {
+        BevyAxisButton {
+            axis: BevyAxisKind::GamepadButton(value),
+            is_pressed_fn: value_to_press,
+        }
+    }
+}
+
+impl From<BevyAxisKind> for BevyAxisButton {
+    fn from(value: BevyAxisKind) -> Self {
+        BevyAxisButton {
+            axis: value,
+            is_pressed_fn: value_to_press,
+        }
+    }
+}
+
+fn positive_only(asdf: f32) -> bool {
+    asdf > 0.
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ButtonBindingKind {
+    Standard(BevyButtonKind),
+    Axis(BevyAxisButton),
+}
+
+impl ButtonBindingKind {
+    pub fn kind(&self) -> BevyInputKind {
+        match self {
+            ButtonBindingKind::Standard(bevy_button_kind) => {
+                BevyInputKind::Button(*bevy_button_kind)
+            }
+            ButtonBindingKind::Axis(bevy_axis_button) => BevyInputKind::Axis(bevy_axis_button.axis),
+        }
+    }
+    pub(crate) fn apply(&self, value: InputValue) -> bool {
+        match self {
+            ButtonBindingKind::Standard(_) => value.is_pressed(),
+            ButtonBindingKind::Axis(bevy_axis_button) => bevy_axis_button.apply(value),
+        }
+    }
+}
+
+impl From<KeyCode> for ButtonBindingKind {
+    fn from(value: KeyCode) -> Self {
+        Self::Standard(value.into())
+    }
+}
+
+impl From<MouseButton> for ButtonBindingKind {
+    fn from(value: MouseButton) -> Self {
+        Self::Standard(value.into())
+    }
+}
+
+impl From<GamepadButton> for ButtonBindingKind {
+    fn from(value: GamepadButton) -> Self {
+        Self::Standard(value.into())
+    }
+}
+
+impl From<BevyButtonKind> for ButtonBindingKind {
+    fn from(value: BevyButtonKind) -> Self {
+        Self::Standard(value.into())
+    }
+}
+
+impl From<BevyAxisKind> for ButtonBindingKind {
+    fn from(value: BevyAxisKind) -> Self {
+        Self::Axis(value.into())
+    }
+}
+
+impl From<BevyInputKind> for ButtonBindingKind {
+    fn from(value: BevyInputKind) -> Self {
+        match value {
+            BevyInputKind::Axis(bevy_axis_kind) => bevy_axis_kind.into(),
+            BevyInputKind::Button(bevy_button_kind) => bevy_button_kind.into(),
+        }
+    }
+}
+
+impl From<BevyAxisButton> for ButtonBindingKind {
+    fn from(value: BevyAxisButton) -> Self {
+        Self::Axis(value)
+    }
+}
 
 /// A set of buttons that must all be pressed at once to be considered active.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ButtonChord {
-    actions: Vec<BevyInputKind>,
+    actions: Vec<ButtonBindingKind>,
 }
 
 impl ButtonChord {
-    pub fn bindings(&self) -> &[BevyInputKind] {
+    pub fn bindings(&self) -> &[ButtonBindingKind] {
         &self.actions
     }
     pub fn len(&self) -> usize {
         self.actions.len()
     }
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
-        self.actions.clone()
+        self.actions.iter().map(|asdf| asdf.kind()).collect()
     }
-    pub fn new(bindings: Vec<BevyInputKind>) -> Self {
+    pub fn new(bindings: Vec<ButtonBindingKind>) -> Self {
         Self { actions: bindings }
+    }
+    pub(crate) fn apply(&self, value: InputValue) -> bool {
+        if self.actions.is_empty() {
+            value.is_pressed()
+        } else {
+            self.actions[0].apply(value)
+        }
     }
 }
 
@@ -39,7 +180,7 @@ pub enum ButtonComboRules {
 /// A set of buttons that must all be pressed one after another to become active.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ButtonCombo {
-    actions: Vec<BevyInputKind>,
+    actions: Vec<ButtonBindingKind>,
     current_index: usize,
     last_hit: Instant,
     tolerance: Duration,
@@ -47,18 +188,18 @@ pub struct ButtonCombo {
 }
 
 impl ButtonCombo {
-    pub fn bindings(&self) -> &[BevyInputKind] {
+    pub fn bindings(&self) -> &[ButtonBindingKind] {
         &self.actions
     }
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
-        self.actions.clone()
+        self.actions.iter().map(|a| a.kind()).collect()
     }
     pub fn rules(&self) -> ButtonComboRules {
         self.rules
     }
     /// Creates a new button combo bindings.
     pub fn new_with_tolerance(
-        bindings: Vec<BevyInputKind>,
+        bindings: Vec<ButtonBindingKind>,
         rules: ButtonComboRules,
         tolerance: Duration,
     ) -> Self {
@@ -75,17 +216,17 @@ impl ButtonCombo {
     }
     /// Creates a new button combo bindings with default [`ButtonComboRules`].
     pub fn new_with_tolerance_default_rules(
-        bindings: Vec<BevyInputKind>,
+        bindings: Vec<ButtonBindingKind>,
         tolerance: Duration,
     ) -> Self {
         Self::new_with_tolerance(bindings, ButtonComboRules::default(), tolerance)
     }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new(bindings: Vec<BevyInputKind>, rules: ButtonComboRules) -> Self {
+    pub fn new(bindings: Vec<ButtonBindingKind>, rules: ButtonComboRules) -> Self {
         Self::new_with_tolerance(bindings, rules, Duration::from_millis(250))
     }
     /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new_default_rules(bindings: Vec<BevyInputKind>) -> Self {
+    pub fn new_default_rules(bindings: Vec<ButtonBindingKind>) -> Self {
         Self::new_with_tolerance(
             bindings,
             ButtonComboRules::default(),
@@ -111,7 +252,7 @@ impl ButtonCombo {
     /// # Warning
     ///
     /// If the timer between expected presses ran out, it will return the first binding.
-    pub fn expected_binding(&self) -> &BevyInputKind {
+    pub fn expected_binding(&self) -> &ButtonBindingKind {
         let i = if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
             0
         } else {
@@ -121,7 +262,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding after [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the last
     /// binding to expect.
-    pub fn next_binding(&self) -> Option<&BevyInputKind> {
+    pub fn next_binding(&self) -> Option<&ButtonBindingKind> {
         let i = self.current_index + 1;
         if i == self.actions.len() {
             None
@@ -131,7 +272,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding before [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the first
     /// binding to expect.
-    pub fn previous_binding(&self) -> Option<&BevyInputKind> {
+    pub fn previous_binding(&self) -> Option<&ButtonBindingKind> {
         if self.current_index == 0 {
             None
         } else {
@@ -146,7 +287,7 @@ impl ButtonCombo {
     ///
     /// If the duration between the last time `self.hit()` and the call of this function is greater than `self.tolerance`
     /// the combo will reset to the beginning of the combo.
-    pub fn expected_binding_mut(&mut self) -> &mut BevyInputKind {
+    pub fn expected_binding_mut(&mut self) -> &mut ButtonBindingKind {
         if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
             self.current_index = 0;
         }
@@ -154,7 +295,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding after [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the last
     /// binding to expect.
-    pub fn next_binding_mut(&mut self) -> Option<&mut BevyInputKind> {
+    pub fn next_binding_mut(&mut self) -> Option<&mut ButtonBindingKind> {
         let i = self.current_index + 1;
         if i == self.actions.len() {
             None
@@ -164,7 +305,7 @@ impl ButtonCombo {
     }
     /// Grabs the binding before [`Self::expected_binding`] or `None` if the [`Self::expected_binding`] is the first
     /// binding to expect.
-    pub fn previous_binding_mut(&mut self) -> Option<&mut BevyInputKind> {
+    pub fn previous_binding_mut(&mut self) -> Option<&mut ButtonBindingKind> {
         if self.current_index == 0 {
             None
         } else {
@@ -176,12 +317,11 @@ impl ButtonCombo {
     pub fn hit(&mut self) -> bool {
         self.last_hit = Instant::now();
         let next = self.current_index + 1;
-        let out = if next == self.actions.len() {
+        let out = next == self.actions.len();
+        if out {
             self.current_index = 0;
-            true
         } else {
             self.current_index = next;
-            false
         };
         out
     }
@@ -194,7 +334,7 @@ pub enum ButtonBinding {
     /// A set of [`ButtonBinding`] that must be pressed one after another to become active.
     Combo(ButtonCombo),
     /// standard button from bevy inputs
-    Single(BevyInputKind),
+    Single(ButtonBindingKind),
 }
 
 impl ButtonBinding {
@@ -203,7 +343,7 @@ impl ButtonBinding {
         match self {
             ButtonBinding::Chord(button_chord) => out.extend(button_chord.input_kinds()),
             ButtonBinding::Combo(button_combo) => out.extend(button_combo.input_kinds()),
-            ButtonBinding::Single(input) => out.push(input.clone()),
+            ButtonBinding::Single(input) => out.push(input.kind()),
         }
         out
     }
@@ -239,9 +379,15 @@ impl From<ButtonChord> for ButtonBinding {
     }
 }
 
+impl From<BevyButtonKind> for ButtonBinding {
+    fn from(value: BevyButtonKind) -> Self {
+        Self::Single(value.into())
+    }
+}
+
 impl From<BevyInputKind> for ButtonBinding {
     fn from(value: BevyInputKind) -> Self {
-        Self::Single(value)
+        Self::Single(value.into())
     }
 }
 
