@@ -1,5 +1,5 @@
 use bevy::{
-    ecs::{entity::Entity, system::Commands},
+    ecs::{entity::Entity, system::Commands, world::Mut},
     input::{
         ButtonInput,
         gamepad::Gamepad,
@@ -12,12 +12,48 @@ use bevy::{
 use crate::{
     BindEvent, InputBindings,
     axis::{AxisBinding, AxisBindingKind},
-    button::ButtonBinding,
+    button::{ButtonBinding, ButtonCombo},
     org::{InputHandler, InputValue},
     plugins::InputKey,
 };
 
 //TODO system that automatically detects gamepad connections and disconnection and tries to keep everyone connected.
+
+fn expected_is_pressed(button_combo: &mut ButtonCombo, input_handler : &mut Mut<InputHandler>) -> InputValue {
+    match button_combo.rules() {
+        crate::button::ButtonComboRules::None => button_combo.hit().into(),
+        crate::button::ButtonComboRules::PreviousMustBeReleased => {
+            let prev = button_combo.previous_binding();
+            // If a previous button exist check that it is released.
+            if let Some(p) = prev {
+                // Either differ to re-poll or if previous is not pressed hit the combo.
+                if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
+                    button_combo.hit().into()
+                }else{
+                    false.into()
+                }
+            }else{
+                // No previous, hit because pressed.
+                button_combo.hit().into()
+            }
+        }
+        crate::button::ButtonComboRules::NextMustBeReleased => {
+            let next = button_combo.next_binding();
+            // If a next button exist check that it is released.
+            if let Some(p) = next {
+                // Either differ to re-poll or if next is not pressed hit the combo.
+                if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
+                    button_combo.hit().into()
+                }else{
+                    false.into()
+                }
+            }else{
+                // No next, hit because pressed.
+                button_combo.hit().into()
+            }
+        }
+    }
+}
 
 pub fn gather_button_inputs<K, T>(
     mut commands: Commands,
@@ -35,8 +71,8 @@ pub fn gather_button_inputs<K, T>(
     T: BindEvent + 'static,
 {
     let players = bindings.count();
-    for (entity, mut bindings, mut maybe_clash) in bindings.iter_mut() {
-        let Some(input_handler) = &mut maybe_clash else {
+    for (entity, mut bindings, mut input_handler) in bindings.iter_mut() {
+        let Some(input_handler) = &mut input_handler else {
             if let Ok(mut e_cmds) = commands.get_entity(entity) {
                 e_cmds.try_insert(InputHandler::default());
             }
@@ -91,23 +127,12 @@ pub fn gather_button_inputs<K, T>(
                                 input_handler.poll(button_chord.bindings())
                             }
                             ButtonBinding::Combo(button_combo) => {
-                                match input_handler.poll(&vec![*button_combo.expected_binding()]) {
-                                    Some(expected) => if expected.is_pressed() {
-                                        let prev = button_combo.previous_binding();
-                                        if let Some(p) = prev {
-                                            if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
-                                                Some(button_combo.hit().into())
-                                            }else{
-                                                Some(false.into())
-                                            }
-                                        }else{
-                                            Some(button_combo.hit().into())
-                                        }
+                                // Either differ to re-poll or check if the next expected button is pressed.
+                                input_handler.poll(&vec![*button_combo.expected_binding_mut()]).map(|expected| if expected.is_pressed() {
+                                        expected_is_pressed(button_combo, input_handler)
                                     }else{
-                                        Some(false.into())
-                                    },
-                                    None => None,
-                                }
+                                        false.into()
+                                    })
                             }
                             ButtonBinding::Single(bevy_input_kind) => {
                                 input_handler.poll(&[*bevy_input_kind])
@@ -217,16 +242,7 @@ pub fn gather_button_inputs<K, T>(
                                 ButtonBinding::Combo(button_combo) => {
                                     let expected = input_handler.repoll(&vec![*button_combo.expected_binding()]);
                                     if expected.is_pressed() {
-                                        let prev = button_combo.previous_binding();
-                                        if let Some(p) = prev {
-                                            if let Some(pre_asdf) = input_handler.poll(&vec![*p]) && !pre_asdf.is_pressed() {
-                                                button_combo.hit().into()
-                                            }else{
-                                                false.into()
-                                            }
-                                        }else{
-                                            button_combo.hit().into()
-                                        }
+                                        expected_is_pressed(button_combo, input_handler)
                                     }else{
                                         false.into()
                                     }

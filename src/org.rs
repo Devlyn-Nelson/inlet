@@ -293,66 +293,11 @@ impl ClashSettings {
     }
 }
 
-// pub(crate) struct BindSort<K> {
-//     pub(crate) order: Vec<BindLookup<K>>
-// }
-
-// impl<K> BindSort<K> {
-//     pub(crate) fn new() -> Self {
-//         Self { order: Vec::default() }
-//     }
-//     pub(crate) fn update_list<K, T>(&mut self, map: &HashMap<K, InputBinding<T>>)where K:Clone {
-//         let new = Vec::default();
-//         for (key, value) in map {
-//             match &value {
-//                 InputBinding::Action(action_binding) => {
-//                 }
-//                 InputBinding::Value(value_binding) => todo!(),
-//                 InputBinding::DualValue(dual_value_binding) => todo!(),
-//             }
-//         }
-//     }
-// }
-
-// fn get_button_binding_lookups<T>(action_binding: ActionBinding<T>) {
-//     for (index, binding) in action_binding.bindings().iter().enumerate() {
-
-//     }
-// }
-
-// fn get_axis_binding_lookups<T>(axis_binding: ValueBinding<T>) {
-//     for (index, binding) in axis_binding.bindings().iter().enumerate() {
-
-//     }
-// }
-
-// pub(crate) struct BindLookup<K> {
-//     chord_len: usize,
-//     /// Key in hte InputBindings
-//     key: K,
-//     /// Index of the binding within the InputBinding.
-//     index: usize,
-// }
-
-// impl<K> PartialEq for BindLookup<K> {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.chord_len == other.chord_len
-//     }
-// }
-
-// impl<K> Eq for BindLookup<K> {}
-
-// impl<K> PartialOrd for BindLookup<K> {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }
-
-// impl<K> Ord for BindLookup<K> {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         other.chord_len.cmp(&self.chord_len)
-//     }
-// }
+impl Default for ClashSettings {
+    fn default() -> Self {
+        ClashSettings::Buffered(Some(Duration::from_millis(10)))
+    }
+}
 
 #[derive(Component)]
 pub struct InputHandler {
@@ -368,7 +313,7 @@ impl Default for InputHandler {
         Self {
             frame: 0,
             clashables: HashMap::default(),
-            settings: ClashSettings::Buffered(Some(Duration::from_millis(10))),
+            settings: ClashSettings::default(),
             should_rescan: true,
         }
     }
@@ -392,7 +337,7 @@ impl InputHandler {
         &self.settings
     }
     pub fn tick(&mut self) {
-        for (c, state) in self.clashables.iter_mut() {
+        for (_c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
                 if matches!(
                     state.kind,
@@ -418,7 +363,7 @@ impl InputHandler {
                 None
             };
             if let Some(new) = new {
-                bevy::log::debug!("{c:?}: {} -> {new}", state.kind);
+                // bevy::log::info!("{c:?}: {} -> {new}", state.kind);
                 state.kind.replace(new);
             }
         }
@@ -513,7 +458,7 @@ impl InputHandler {
                 None
             };
             if let Some(new) = new_state {
-                bevy::log::debug!("{c:?}: {} -> {new}", state.kind);
+                // bevy::log::info!("{c:?}: {} -> {new}", state.kind);
                 state.kind.replace(new);
             }
             if pressed && state.frame != self.frame {
@@ -551,7 +496,7 @@ impl InputHandler {
                 Some(val)
             }
             Outy::Repoll => {
-                bevy::log::info!("repoll");
+                // bevy::log::info!("repoll");
                 None
             }
         }
