@@ -13,7 +13,7 @@ use crate::{
     BindEvent, InputBindings,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    org::{InputHandler, InputValue},
+    clash_manager::{ClashSettings, InputHandler, InputValue},
     plugins::InputKey,
     pressed_to_value,
 };
@@ -70,23 +70,32 @@ fn expected_is_pressed(
 pub fn gather_button_inputs<K, T>(
     mut commands: Commands,
     mut writer: MessageWriter<T>,
-    mut bindings: Query<(Entity, &mut InputBindings<K, T>, Option<&mut InputHandler>)>,
+    mut bindings: Query<(
+        Entity,
+        &mut InputBindings<K, T>,
+        Option<&mut InputHandler>,
+        Option<&ClashSettings>,
+    )>,
     gamepad_query: Query<&Gamepad>,
+    default_clash_settings: Option<Res<ClashSettings>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
     accumulated_mouse_scroll: Res<AccumulatedMouseScroll>,
-    // gamepad_buttons: Res<ButtonInput<GamepadButton>>,
-    // gamepad_axis: Res<Axis<GamepadAxis>>,
 ) where
     K: InputKey + Send + Sync + 'static,
     T: BindEvent + 'static,
 {
     let players = bindings.count();
-    for (entity, mut bindings, mut input_handler) in bindings.iter_mut() {
+    for (entity, mut bindings, mut input_handler, new_settings) in bindings.iter_mut() {
         let Some(input_handler) = &mut input_handler else {
             if let Ok(mut e_cmds) = commands.get_entity(entity) {
-                e_cmds.try_insert(InputHandler::default());
+                let handler = if let Some(asdf) = &default_clash_settings {
+                    (**asdf).into()
+                } else {
+                    InputHandler::default()
+                };
+                e_cmds.try_insert(handler);
             }
             continue;
         };
@@ -104,6 +113,14 @@ pub fn gather_button_inputs<K, T>(
         } else {
             Vec::new()
         };
+
+        if let Some(new) = new_settings {
+            if let Ok(mut e_cmds) = commands.get_entity(entity) {
+                e_cmds.try_remove::<ClashSettings>();
+            }
+            input_handler.set_settings(*new);
+            bindings.change();
+        }
 
         if bindings.changed() {
             input_handler.update_list(&bindings.bindings);

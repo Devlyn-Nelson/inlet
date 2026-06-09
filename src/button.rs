@@ -7,7 +7,7 @@ use bevy::{
 
 use crate::{
     axis::ValueState,
-    org::{BevyAxisKind, BevyButtonKind, BevyInputKind, InputValue},
+    clash_manager::{BevyAxisKind, BevyButtonKind, BevyInputKind, InputValue},
     value_to_press,
 };
 #[allow(unpredictable_function_pointer_comparisons)]

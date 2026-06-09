@@ -10,7 +10,7 @@ use bevy::{
 
 use crate::{
     button::{ActionableState, ButtonBinding, ButtonBindingKind, ButtonState},
-    org::BevyInputKind,
+    clash_manager::BevyInputKind,
 };
 
 /// Allows you to customize the behavior of an axis.
@@ -105,6 +105,12 @@ impl From<ButtonBinding> for AxisBindingButton {
     }
 }
 
+/// Represents mouse changes in the range [-1.0, 1.0].
+///
+/// ## Usage
+///
+/// This is used to determine which axis has changed its value when receiving a
+/// mouse axis event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MouseAxis {
     MotionX,

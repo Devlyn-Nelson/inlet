@@ -3,7 +3,7 @@ use inlet::{
     InputBindings, InputManagementPlugin,
     axis::AxisBinding,
     button::{BevyAxisButton, ButtonChord, ButtonCombo, ButtonEventBinding},
-    org::BevyAxisKind,
+    clash_manager::BevyAxisKind,
 };
 
 fn main() {

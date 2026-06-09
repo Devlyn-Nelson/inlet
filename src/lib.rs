@@ -1,7 +1,7 @@
 pub mod axis;
 pub mod button;
 // pub mod clash;
-pub mod org;
+pub mod clash_manager;
 mod plugins;
 mod systems;
 
@@ -19,7 +19,7 @@ use bevy::{
 use crate::{
     axis::{DualValueBinding, ValueBinding},
     button::ButtonState,
-    org::BevyInputKind,
+    clash_manager::BevyInputKind,
 };
 
 pub trait BindEvent: Message {}
@@ -204,7 +204,6 @@ pub fn pressed_to_value(pressed: bool) -> f32 {
 }
 
 #[derive(Component)]
-#[require(crate::org::InputHandler)]
 pub struct InputBindings<K, T: BindEvent> {
     pub(crate) bindings: HashMap<K, InputBinding<T>>,
     pub(crate) assigned_gamepad: Option<Entity>,
@@ -227,6 +226,9 @@ where
     pub fn with_dual_value_binding(mut self, name: K, bindings: DualValueBinding<T>) -> Self {
         self.register_dual_value_binding(name, bindings);
         self
+    }
+    pub(crate) fn change(&mut self) {
+        self.changed = true;
     }
     pub(crate) fn changed(&mut self) -> bool {
         if self.changed {

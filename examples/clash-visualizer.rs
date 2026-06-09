@@ -16,6 +16,7 @@ enum InputTypes {
     One,
     Two,
     Three,
+    Four,
 }
 
 #[derive(Component)]
@@ -24,6 +25,8 @@ struct One;
 struct Two;
 #[derive(Component)]
 struct Three;
+#[derive(Component)]
+struct Four;
 
 #[derive(Resource)]
 struct Colors {
@@ -52,6 +55,16 @@ fn setup(
                     KeyCode::KeyD.into(),
                 ])
                 .into(),
+            )
+            .with_action_binding(
+                InputTypes::Four,
+                ButtonChord::new(vec![
+                    KeyCode::KeyA.into(),
+                    KeyCode::KeyS.into(),
+                    KeyCode::KeyD.into(),
+                    KeyCode::KeyF.into(),
+                ])
+                .into(),
             ),
     ));
 
@@ -62,23 +75,33 @@ fn setup(
         Mesh2d(meshes.add(Rectangle::default())),
         MeshMaterial2d(red.clone()),
         Transform::default()
-            .with_translation(Vec3::new(-256., 0., 0.))
+            .with_translation(Vec3::new(-256. - 128., 0., 0.))
             .with_scale(Vec3::splat(128.)),
         One,
     ));
     commands.spawn((
         Mesh2d(meshes.add(Rectangle::default())),
         MeshMaterial2d(red.clone()),
-        Transform::default().with_scale(Vec3::splat(128.)),
+        Transform::default()
+            .with_translation(Vec3::new(-128.0, 0., 0.))
+            .with_scale(Vec3::splat(128.)),
         Two,
     ));
     commands.spawn((
         Mesh2d(meshes.add(Rectangle::default())),
         MeshMaterial2d(red.clone()),
         Transform::default()
-            .with_translation(Vec3::new(256., 0., 0.))
+            .with_translation(Vec3::new(128., 0., 0.))
             .with_scale(Vec3::splat(128.)),
         Three,
+    ));
+    commands.spawn((
+        Mesh2d(meshes.add(Rectangle::default())),
+        MeshMaterial2d(red.clone()),
+        Transform::default()
+            .with_translation(Vec3::new(256. + 128., 0., 0.))
+            .with_scale(Vec3::splat(128.)),
+        Four,
     ));
 
     commands.insert_resource(Colors { red, green });
@@ -91,6 +114,7 @@ fn update(
     one: Single<Entity, With<One>>,
     two: Single<Entity, With<Two>>,
     three: Single<Entity, With<Three>>,
+    four: Single<Entity, With<Four>>,
 ) {
     let Some(colors) = colors else {
         return;
@@ -135,6 +159,21 @@ fn update(
         inlet::button::ActionableState::JustReleased => {
             commands
                 .get_entity(three.entity())
+                .unwrap()
+                .insert(MeshMaterial2d(colors.red.clone()));
+        }
+        _ => {}
+    }
+    match controller.get_action_state(&InputTypes::Four).kind() {
+        inlet::button::ActionableState::JustPressed => {
+            commands
+                .get_entity(four.entity())
+                .unwrap()
+                .insert(MeshMaterial2d(colors.green.clone()));
+        }
+        inlet::button::ActionableState::JustReleased => {
+            commands
+                .get_entity(four.entity())
                 .unwrap()
                 .insert(MeshMaterial2d(colors.red.clone()));
         }

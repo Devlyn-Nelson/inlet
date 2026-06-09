@@ -9,6 +9,8 @@ Input library for Bevy Game Engine.
   - `ActionBinding` has internal states to best represent button like behavior: JustPressed, Pressed, JustReleased, Released. Can also be used as digital (-1, 0, 1) axis.
   - `ValueBinding` can return a value (-1.0 to 1.0) from any axis or set of buttons. Can have a stack of generic functions that modify the output. Can be used as a button, by default it is assumed any non-zero value is pressed, but modifiers can enable you to control this behavior more finely.
   - `DualValueBinding` internally behaves as if it is just 2 `ValueBinding`'s.
+- `ButtonChord`s (multiple buttons at once) with configurable settings for resolving clashing inputs.
+- `ButtonCombo`s (multiple sequentially pressed buttons). Think GTA cheats but without incorrect buttons interrupting it.
 
 # Usage
 
@@ -214,7 +216,15 @@ fn accept_events(
 
 Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system to your bevy app.
 
-# In Progress
+## Clash Settings
 
-- Interrupting Combos when an invalid button is pressed, with setting to disable interrupts.
-- Better Clash Detection.
+If you like `Chord`s and have opinions about how inputs that clash should behave: you can configure how that happens.
+
+### Resource
+
+You can spawn  a `ClashSettings` resource (preferably on start up) that all new `InputHandler` will use. The system that updates bindings will automatically insert `InputHandler` on entities that have a `InputBindings` attached to them, acting as a default.
+
+### Component
+
+When you insert `ClashSettings` as a component on an entity that also has an attached `InputBindings` the settings will update and all current input states will reset. This means you can allow player to configure this on a per-player basis.
+
