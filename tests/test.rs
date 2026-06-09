@@ -6,7 +6,7 @@ use bevy::{
 use inlet::{
     InputBindings,
     axis::{AxisBinding, DualValueBinding},
-    button::{ActionBinding, ButtonBinding, ButtonEventBinding},
+    button::{ActionBinding, ButtonEventBinding},
 };
 
 /// The Input types. used as a key to organize which binding belongs to which input.
@@ -53,7 +53,7 @@ fn test_fn() {
     bindings.register_action_binding(
         GenericActions::Jump,
         ActionBinding::new(
-            vec![ButtonBinding::Gamepad(GamepadButton::South)],
+            vec![GamepadButton::South.into()],
             ButtonEventBinding::when_pressed(GenericActionsMessage::jump),
         ),
     );

@@ -1,6 +1,5 @@
-use std::hash::Hash;
-
 use bevy::{
+    ecs::{entity::Entity, system::Commands, world::Mut},
     input::{
         ButtonInput,
         gamepad::Gamepad,
@@ -11,36 +10,95 @@ use bevy::{
 };
 
 use crate::{
-    BindEvent, InputBindings,
-    axis::{AxisBinding, AxisBindingKind, ValueState},
-    button::{ButtonBinding, ButtonState},
-    clash::ClashHandler,
+    BindEvent, InputBindings, InputValue,
+    axis::{AxisBinding, AxisBindingKind},
+    button::{ButtonBinding, ButtonCombo},
+    manager::{ClashSettings, InputHandler},
+    plugins::InputKey,
+    pressed_to_value,
 };
 
 //TODO system that automatically detects gamepad connections and disconnection and tries to keep everyone connected.
 
+/// This is for when a combos expected button is pressed. this will check the proper rules and check to
+/// verify them.
+fn expected_is_pressed(
+    button_combo: &mut ButtonCombo,
+    input_handler: &mut Mut<InputHandler>,
+) -> InputValue {
+    match button_combo.rules() {
+        crate::button::ButtonComboRules::None => button_combo.hit().into(),
+        crate::button::ButtonComboRules::PreviousMustBeReleased => {
+            let prev = button_combo.previous_binding();
+            // If a previous button exist check that it is released.
+            if let Some(p) = prev {
+                // Either differ to re-poll or if previous is not pressed hit the combo.
+                let b = vec![p.kind()];
+                if let Some(pre_asdf) = input_handler.poll(&b)
+                    && !p.apply(pre_asdf)
+                {
+                    button_combo.hit().into()
+                } else {
+                    false.into()
+                }
+            } else {
+                // No previous, hit because pressed.
+                button_combo.hit().into()
+            }
+        }
+        crate::button::ButtonComboRules::NextMustBeReleased => {
+            let next = button_combo.next_binding();
+            // If a next button exist check that it is released.
+            if let Some(p) = next {
+                // Either differ to re-poll or if next is not pressed hit the combo.
+                let b = vec![p.kind()];
+                if let Some(pre_asdf) = input_handler.poll(&b)
+                    && !p.apply(pre_asdf)
+                {
+                    button_combo.hit().into()
+                } else {
+                    false.into()
+                }
+            } else {
+                // No next, hit because pressed.
+                button_combo.hit().into()
+            }
+        }
+    }
+}
+
 pub fn gather_button_inputs<K, T>(
+    mut commands: Commands,
     mut writer: MessageWriter<T>,
-    mut bindings: Query<(&mut InputBindings<K, T>, Option<&mut ClashHandler>)>,
+    mut bindings: Query<(
+        Entity,
+        &mut InputBindings<K, T>,
+        Option<&mut InputHandler>,
+        Option<&ClashSettings>,
+    )>,
     gamepad_query: Query<&Gamepad>,
+    default_clash_settings: Option<Res<ClashSettings>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
     accumulated_mouse_scroll: Res<AccumulatedMouseScroll>,
-    // gamepad_buttons: Res<ButtonInput<GamepadButton>>,
-    // gamepad_axis: Res<Axis<GamepadAxis>>,
 ) where
-    K: Hash + Eq + Send + Sync + 'static,
+    K: InputKey + Send + Sync + 'static,
     T: BindEvent + 'static,
 {
     let players = bindings.count();
-    for (mut bindings, mut maybe_clash) in bindings.iter_mut() {
-        if let Some(clash_handler) = &mut maybe_clash {
-            if bindings.changed() {
-                clash_handler.update_clash_list(&bindings.bindings);
+    for (entity, mut bindings, mut input_handler, new_settings) in bindings.iter_mut() {
+        let Some(input_handler) = &mut input_handler else {
+            if let Ok(mut e_cmds) = commands.get_entity(entity) {
+                let handler = if let Some(asdf) = &default_clash_settings {
+                    (**asdf).into()
+                } else {
+                    InputHandler::default()
+                };
+                e_cmds.try_insert(handler);
             }
-            clash_handler.tick();
-        }
+            continue;
+        };
         let gamepads = if players == 1 {
             gamepad_query.iter().collect()
         } else if let Some(gamepad) = &bindings.assigned_gamepad {
@@ -55,7 +113,29 @@ pub fn gather_button_inputs<K, T>(
         } else {
             Vec::new()
         };
-        let mut maybe_clash = maybe_clash.as_mut().map(|asdf| asdf.as_mut());
+
+        if let Some(new) = new_settings {
+            if let Ok(mut e_cmds) = commands.get_entity(entity) {
+                e_cmds.try_remove::<ClashSettings>();
+            }
+            input_handler.set_settings(*new);
+            bindings.change();
+        }
+
+        if bindings.changed() {
+            input_handler.update_list(&bindings.bindings);
+        } else {
+            input_handler.tick();
+        }
+
+        input_handler.update(
+            &gamepads,
+            keyboard.as_ref(),
+            mouse.as_ref(),
+            accumulated_mouse_motion.as_ref(),
+            accumulated_mouse_scroll.as_ref(),
+        );
+
         // TODO figure out a way to do input binding sorting so non-buffered clash
         // detection can work better.
         //
@@ -63,277 +143,287 @@ pub fn gather_button_inputs<K, T>(
         //     for (key, binding) in bindings.bindings.iter() {
         //     }
         // }else{
-        for bind in bindings.bindings.values_mut() {
+        let mut repoll = Vec::default();
+        // TODO check if repoll can use key references instead of cloned.
+        for (key, bind) in bindings.bindings.iter_mut() {
             match bind {
                 crate::InputBinding::Action(action_binding) => {
-                    let pressed = check_button_bindings(
-                        &action_binding.state,
-                        &mut action_binding.bindings[..],
-                        &gamepads,
-                        keyboard.as_ref(),
-                        mouse.as_ref(),
-                        accumulated_mouse_motion.as_ref(),
-                        accumulated_mouse_scroll.as_ref(),
-                        &mut maybe_clash,
-                        1,
-                    );
-                    if let Some(event) = action_binding.feed_event(pressed) {
-                        writer.write(event);
+                    let mut pressed = action_binding.mocked;
+                    let mut re = Vec::default();
+                    for (i, button_binding) in action_binding.bindings.iter_mut().enumerate() {
+                        let v = match button_binding {
+                            ButtonBinding::Chord(button_chord) => input_handler
+                                .poll(&button_chord.input_kinds())
+                                .map(|v| button_chord.apply(v)),
+                            ButtonBinding::Combo(button_combo) => {
+                                // Either differ to re-poll or check if the next expected button is pressed.
+                                let expected = button_combo.expected_binding_mut();
+                                let out = input_handler.poll(&vec![expected.kind()]);
+                                if let Some(o) = out {
+                                    if expected.apply(o) {
+                                        Some(
+                                            expected_is_pressed(button_combo, input_handler)
+                                                .is_pressed(),
+                                        )
+                                    } else {
+                                        Some(false)
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            ButtonBinding::Single(bevy_input_kind) => input_handler
+                                .poll(&[bevy_input_kind.kind()])
+                                .map(|v| v.is_pressed()),
+                        };
+                        if let Some(p) = v {
+                            pressed |= p;
+                        } else {
+                            re.push(i);
+                        }
+                    }
+                    if re.is_empty() {
+                        if let Some(event) = action_binding.feed(pressed) {
+                            writer.write(event);
+                        }
+                    } else {
+                        repoll.push(Repoll {
+                            key: key.clone(),
+                            x_i: re,
+                            x: InputValue::Pressed(pressed),
+                            y: InputValue::default(),
+                            y_i: vec![],
+                        });
                     }
                 }
                 crate::InputBinding::Value(value_binding) => {
-                    let v = check_axis_bindings(
-                        &value_binding.state,
-                        &mut value_binding.bindings[..],
-                        &gamepads,
-                        keyboard.as_ref(),
-                        mouse.as_ref(),
-                        accumulated_mouse_motion.as_ref(),
-                        accumulated_mouse_scroll.as_ref(),
-                        &mut maybe_clash,
-                        1,
-                    );
-                    if let Some(event) = value_binding.feed(v) {
-                        writer.write(event);
+                    match check_axes(
+                        &mut value_binding.bindings,
+                        input_handler,
+                        value_binding.mock,
+                    ) {
+                        Ok(v) => {
+                            if let Some(event) = value_binding.feed(v) {
+                                writer.write(event);
+                            }
+                        }
+                        Err((value, re)) => repoll.push(Repoll {
+                            key: key.clone(),
+                            x: InputValue::Value(value),
+                            x_i: re,
+                            y: InputValue::default(),
+                            y_i: vec![],
+                        }),
                     }
                 }
                 crate::InputBinding::DualValue(dual_value_binding) => {
-                    let x = check_axis_bindings(
-                        &dual_value_binding.x_state,
-                        &mut dual_value_binding.x_bindings[..],
-                        &gamepads,
-                        keyboard.as_ref(),
-                        mouse.as_ref(),
-                        accumulated_mouse_motion.as_ref(),
-                        accumulated_mouse_scroll.as_ref(),
-                        &mut maybe_clash,
-                        1,
+                    let x = check_axes(
+                        &mut dual_value_binding.x_bindings,
+                        input_handler,
+                        dual_value_binding.x_mock,
                     );
-                    let y = check_axis_bindings(
-                        &dual_value_binding.y_state,
-                        &mut dual_value_binding.y_bindings[..],
-                        &gamepads,
-                        keyboard.as_ref(),
-                        mouse.as_ref(),
-                        accumulated_mouse_motion.as_ref(),
-                        accumulated_mouse_scroll.as_ref(),
-                        &mut maybe_clash,
-                        1,
+                    let y = check_axes(
+                        &mut dual_value_binding.y_bindings,
+                        input_handler,
+                        dual_value_binding.y_mock,
                     );
-                    let v = Vec2::new(x, y);
-                    if let Some(event) = dual_value_binding.feed(v) {
-                        writer.write(event);
+
+                    match (x, y) {
+                        (Ok(x), Ok(y)) => {
+                            let v = Vec2::new(x, y);
+                            if let Some(event) = dual_value_binding.feed(v) {
+                                writer.write(event);
+                            }
+                        }
+                        (Err((x, x_i)), Err((y, y_i))) => {
+                            repoll.push(Repoll {
+                                key: key.clone(),
+                                x: x.into(),
+                                x_i,
+                                y: y.into(),
+                                y_i,
+                            });
+                        }
+                        (Err((x, x_i)), Ok(y)) => {
+                            repoll.push(Repoll {
+                                key: key.clone(),
+                                x: x.into(),
+                                x_i,
+                                y: y.into(),
+                                y_i: vec![],
+                            });
+                        }
+                        (Ok(x), Err((y, y_i))) => {
+                            repoll.push(Repoll {
+                                key: key.clone(),
+                                x: x.into(),
+                                x_i: vec![],
+                                y: y.into(),
+                                y_i,
+                            });
+                        }
                     }
                 }
             }
         }
-        // }
-    }
-}
-
-fn check_button_clash(
-    binding: &mut ButtonBinding,
-    maybe_clash: &mut Option<&mut ClashHandler>,
-    pressed: bool,
-    chord_length: usize,
-) -> bool {
-    if let Some(clasher) = maybe_clash {
-        let mut allowed = false;
-        for c in binding.clashables() {
-            allowed |= clasher.poll_clash(&c, chord_length, pressed);
-        }
-        allowed && pressed
-    } else {
-        pressed
-    }
-}
-
-fn check_button_bindings(
-    current_state: &ButtonState,
-    bindings: &mut [ButtonBinding],
-    gamepads: &[&Gamepad],
-    keyboard: &ButtonInput<KeyCode>,
-    mouse: &ButtonInput<MouseButton>,
-    accumulated_mouse_motion: &AccumulatedMouseMotion,
-    accumulated_mouse_scroll: &AccumulatedMouseScroll,
-    clash: &mut Option<&mut ClashHandler>,
-    chord_length: usize,
-) -> bool {
-    let mut pressed = false;
-    for button_binding in bindings {
-        pressed |= check_button_binding_pressed(
-            current_state,
-            button_binding,
-            gamepads,
-            keyboard,
-            mouse,
-            accumulated_mouse_motion,
-            accumulated_mouse_scroll,
-            clash,
-            chord_length,
-        );
-    }
-    pressed
-}
-
-fn check_button_binding_pressed(
-    current_state: &ButtonState,
-    binding: &mut ButtonBinding,
-    gamepads: &[&Gamepad],
-    keyboard: &ButtonInput<KeyCode>,
-    mouse: &ButtonInput<MouseButton>,
-    accumulated_mouse_motion: &AccumulatedMouseMotion,
-    accumulated_mouse_scroll: &AccumulatedMouseScroll,
-    maybe_clash: &mut Option<&mut ClashHandler>,
-    chord_length: usize,
-) -> bool {
-    match binding {
-        ButtonBinding::Gamepad(gamepad_button_type) => {
-            let mut out = false;
-            for gpad in gamepads {
-                if gpad.pressed(*gamepad_button_type) {
-                    out |= true;
-                    break;
-                }
-            }
-            check_button_clash(binding, maybe_clash, out, chord_length)
-        }
-        ButtonBinding::Keyboard(key_code) => {
-            let pressed = keyboard.pressed(*key_code);
-            check_button_clash(binding, maybe_clash, pressed, chord_length)
-        }
-        ButtonBinding::Mouse(key_code) => {
-            let pressed = mouse.pressed(*key_code);
-            check_button_clash(binding, maybe_clash, pressed, chord_length)
-        }
-        ButtonBinding::Combo(combo) => {
-            let pressed = check_button_binding_pressed(
-                current_state,
-                combo.expected_binding_mut(),
-                gamepads,
-                keyboard,
-                mouse,
-                accumulated_mouse_motion,
-                accumulated_mouse_scroll,
-                maybe_clash,
-                chord_length,
-            );
-            let conditional = match combo.rules() {
-                crate::button::ButtonComboRules::None => true,
-                crate::button::ButtonComboRules::PreviousMustBeReleased => {
-                    if let Some(p) = combo.previous_binding_mut() {
-                        !check_button_binding_pressed(
-                            current_state,
-                            p,
-                            gamepads,
-                            keyboard,
-                            mouse,
-                            accumulated_mouse_motion,
-                            accumulated_mouse_scroll,
-                            maybe_clash,
-                            chord_length,
-                        )
-                    } else {
-                        true
+        for r in repoll {
+            if let Some(bind) = bindings.bindings.get_mut(&r.key) {
+                match bind {
+                    crate::InputBinding::Action(action_binding) => {
+                        let mut pressed = false;
+                        for index in r.x_i {
+                            let button_binding = &mut action_binding.bindings[index];
+                            pressed |= match button_binding {
+                                ButtonBinding::Chord(button_chord) => {
+                                    let out = input_handler.repoll(&button_chord.input_kinds());
+                                    button_chord.apply(out)
+                                }
+                                ButtonBinding::Combo(button_combo) => {
+                                    let b = button_combo.expected_binding_mut();
+                                    let out = input_handler.repoll(&vec![b.kind()]);
+                                    if b.apply(out) {
+                                        expected_is_pressed(button_combo, input_handler)
+                                            .is_pressed()
+                                    } else {
+                                        false
+                                    }
+                                }
+                                ButtonBinding::Single(bevy_input_kind) => {
+                                    let b = vec![bevy_input_kind.kind()];
+                                    input_handler.repoll(&b).is_pressed()
+                                }
+                            };
+                        }
+                        if let Some(event) = action_binding.feed(pressed) {
+                            writer.write(event);
+                        }
                     }
-                }
-                crate::button::ButtonComboRules::NextMustBeReleased => {
-                    if let Some(p) = combo.next_binding_mut() {
-                        !check_button_binding_pressed(
-                            current_state,
-                            p,
-                            gamepads,
-                            keyboard,
-                            mouse,
-                            accumulated_mouse_motion,
-                            accumulated_mouse_scroll,
-                            maybe_clash,
-                            chord_length,
-                        )
-                    } else {
-                        true
+                    crate::InputBinding::Value(value_binding) => {
+                        let v = re_check_axes(
+                            &value_binding.bindings,
+                            &r.x_i,
+                            r.x.get_value(),
+                            input_handler,
+                        );
+                        if let Some(event) = value_binding.feed(v) {
+                            writer.write(event);
+                        }
                     }
-                }
-            };
-            if conditional && pressed {
-                combo.hit()
-            } else {
-                false
-            }
-        }
-        ButtonBinding::Chord(button_chord) => {
-            let mut out = true;
-            let chord_length = button_chord.len();
-            for b in button_chord.bindings_mut() {
-                let pressed = check_button_binding_pressed(
-                    current_state,
-                    b,
-                    gamepads,
-                    keyboard,
-                    mouse,
-                    accumulated_mouse_motion,
-                    accumulated_mouse_scroll,
-                    &mut None,
-                    chord_length,
-                );
-                if !pressed {
-                    out = false;
-                    break;
-                }
-            }
-            if out && maybe_clash.is_some() {
-                for b in button_chord.bindings_mut() {
-                    if !check_button_clash(b, maybe_clash, true, chord_length) {
-                        out = false;
-                        break;
+                    crate::InputBinding::DualValue(dual_value_binding) => {
+                        let x = re_check_axes(
+                            &dual_value_binding.x_bindings,
+                            &r.x_i,
+                            r.x.get_value(),
+                            input_handler,
+                        );
+                        let y = re_check_axes(
+                            &dual_value_binding.y_bindings,
+                            &r.y_i,
+                            r.y.get_value(),
+                            input_handler,
+                        );
+                        if let Some(event) = dual_value_binding.feed(Vec2 { x, y }) {
+                            writer.write(event);
+                        }
                     }
                 }
             }
-            out
         }
-        ButtonBinding::Axis(axis_binding) => {
-            let value = check_axis_binding(
-                &current_state.value_state(),
-                axis_binding,
-                gamepads,
-                keyboard,
-                mouse,
-                accumulated_mouse_motion,
-                accumulated_mouse_scroll,
-                maybe_clash,
-                chord_length,
-            );
-            value != 0.
-        }
-        ButtonBinding::Mock(out) => *out,
     }
 }
 
-fn check_axis_bindings(
-    current_state: &ValueState,
+struct Repoll<K> {
+    key: K,
+    x: InputValue,
+    x_i: Vec<usize>,
+    y: InputValue,
+    y_i: Vec<usize>,
+}
+
+fn check_axes(
     bindings: &mut [AxisBinding],
-    gamepads: &[&Gamepad],
-    keyboard: &ButtonInput<KeyCode>,
-    mouse: &ButtonInput<MouseButton>,
-    accumulated_mouse_motion: &AccumulatedMouseMotion,
-    accumulated_mouse_scroll: &AccumulatedMouseScroll,
-    maybe_clash: &mut Option<&mut ClashHandler>,
-    chord_length: usize,
+    handler: &mut InputHandler,
+    mock: Option<f32>,
+) -> Result<f32, (f32, Vec<usize>)> {
+    let mut re = Vec::default();
+    let (mut value, mut count) = if let Some(m) = mock { (m, 1) } else { (0., 0) };
+    for (i, b) in bindings.iter_mut().enumerate() {
+        let v = match b.kind() {
+            AxisBindingKind::Single(bevy_input_kind) => handler.poll(&[*bevy_input_kind]),
+            AxisBindingKind::Buttons { plus, minus } => {
+                let p = if let Some(binding) = plus {
+                    handler
+                        .poll(&[binding.kind()])
+                        .map(|out| pressed_to_value(binding.apply(out)))
+                } else {
+                    Some(0.)
+                };
+                let m = if let Some(binding) = minus {
+                    handler
+                        .poll(&[binding.kind()])
+                        .map(|out| pressed_to_value(binding.apply(out)))
+                } else {
+                    Some(0.)
+                };
+                if let (Some(p), Some(m)) = (p, m) {
+                    Some(InputValue::Value(p - m))
+                } else {
+                    None
+                }
+            }
+        };
+        let v = if let Some(v) = v {
+            v
+        } else {
+            re.push(i);
+            continue;
+        };
+        if v.is_pressed() {
+            value += v.get_value();
+            count += 1;
+        }
+    }
+    let avg = if count == 0 {
+        0.
+    } else {
+        value / (count as f32)
+    };
+    if re.is_empty() {
+        Ok(avg)
+    } else {
+        Err((avg, re))
+    }
+}
+
+fn re_check_axes(
+    bindings: &[AxisBinding],
+    indexes: &[usize],
+    mut value: f32,
+    handler: &mut InputHandler,
 ) -> f32 {
-    let mut value = 0.;
-    let mut count = 0;
-    for b in bindings {
-        let v = check_axis_binding(
-            current_state,
-            b,
-            gamepads,
-            keyboard,
-            mouse,
-            accumulated_mouse_motion,
-            accumulated_mouse_scroll,
-            maybe_clash,
-            chord_length,
-        );
+    let mut count = if value == 0. { 0 } else { 1 };
+    for i in indexes.iter() {
+        let b = &bindings[*i];
+        let v = match b.kind() {
+            AxisBindingKind::Single(bevy_input_kind) => {
+                handler.repoll(&[*bevy_input_kind]).get_value()
+            }
+            AxisBindingKind::Buttons { plus, minus } => {
+                let p = if let Some(binding) = plus {
+                    let out = handler.repoll(&[binding.kind()]);
+                    pressed_to_value(binding.apply(out))
+                } else {
+                    0.
+                };
+                let m = if let Some(binding) = minus {
+                    let out = handler.repoll(&[binding.kind()]);
+                    pressed_to_value(binding.apply(out))
+                } else {
+                    0.
+                };
+                p - m
+            }
+        };
         if v != 0. {
             value += v;
             count += 1;
@@ -344,98 +434,4 @@ fn check_axis_bindings(
     } else {
         value / (count as f32)
     }
-}
-
-fn check_axis_binding(
-    current_state: &ValueState,
-    binding: &mut AxisBinding,
-    gamepads: &[&Gamepad],
-    keyboard: &ButtonInput<KeyCode>,
-    mouse: &ButtonInput<MouseButton>,
-    accumulated_mouse_motion: &AccumulatedMouseMotion,
-    accumulated_mouse_scroll: &AccumulatedMouseScroll,
-    maybe_clash: &mut Option<&mut ClashHandler>,
-    chord_length: usize,
-) -> f32 {
-    let mut out = match binding.kind_mut() {
-        AxisBindingKind::GamepadAxis(gamepad_axis) => {
-            let mut value = 0.;
-            let mut count = 0;
-            for gpad in gamepads {
-                if let Some(v) = gpad.get(gamepad_axis.clone())
-                    && v != 0.
-                {
-                    value += v;
-                    count += 1;
-                }
-            }
-            if count == 0 {
-                0.
-            } else {
-                value / (count as f32)
-            }
-        }
-        AxisBindingKind::GamepadButton(b) => {
-            let mut value = 0.;
-            let mut count = 0;
-            for gpad in gamepads {
-                if let Some(v) = gpad.get(b.clone())
-                    && v != 0.
-                {
-                    value += v;
-                    count += 1;
-                }
-            }
-            if count == 0 {
-                0.
-            } else {
-                value / (count as f32)
-            }
-        }
-        AxisBindingKind::Buttons { plus, minus } => {
-            let mut value = if let Some(plus) = plus
-                && check_button_binding_pressed(
-                    &current_state.action_state(),
-                    &mut plus.binding,
-                    gamepads,
-                    keyboard,
-                    mouse,
-                    accumulated_mouse_motion,
-                    accumulated_mouse_scroll,
-                    maybe_clash,
-                    chord_length,
-                ) {
-                1.0
-            } else {
-                0.0
-            };
-            if let Some(minus) = minus
-                && check_button_binding_pressed(
-                    &current_state.action_state(),
-                    &mut minus.binding,
-                    gamepads,
-                    keyboard,
-                    mouse,
-                    accumulated_mouse_motion,
-                    accumulated_mouse_scroll,
-                    maybe_clash,
-                    chord_length,
-                )
-            {
-                value -= 1.0;
-            }
-            value
-        }
-        AxisBindingKind::Mouse(mouse_axis) => match mouse_axis {
-            crate::axis::MouseAxis::MotionX => accumulated_mouse_motion.delta.x,
-            crate::axis::MouseAxis::MotionY => accumulated_mouse_motion.delta.y,
-            crate::axis::MouseAxis::ScrollX => accumulated_mouse_scroll.delta.x,
-            crate::axis::MouseAxis::ScrollY => accumulated_mouse_scroll.delta.y,
-        },
-        AxisBindingKind::Mock(val) => *val,
-    };
-    for m in binding.mods() {
-        out = m.do_thing(out);
-    }
-    out
 }

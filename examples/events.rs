@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use inlet::{
     InputBindings, InputManagementPlugin,
-    axis::{AxisBinding, AxisModifier},
-    button::{ButtonChord, ButtonCombo, ButtonEventBinding},
+    axis::AxisBinding,
+    button::{BevyAxisButton, ButtonChord, ButtonCombo, ButtonEventBinding},
 };
 
 fn main() {
@@ -17,7 +17,7 @@ fn main() {
 }
 
 /// All of the different controls that exist. These are the keys to bindings.
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     Move,
     Zoom,
@@ -112,19 +112,14 @@ fn setup(
                             GamepadButton::DPadLeft.into(),
                         ])
                         .into(),
-                        // Up -> Down -> Right -> Left on joystick
-                        ButtonCombo::new_default_rules(vec![
-                            AxisBinding::gamepad_left_stick_y()
-                                .with_modifier(AxisModifier::POSITIVE_ONLY)
+                        ButtonChord::new(vec![
+                            BevyAxisButton::new_positive_only(GamepadAxis::LeftStickY.into())
                                 .into(),
-                            AxisBinding::gamepad_left_stick_y()
-                                .with_modifier(AxisModifier::NEGATIVE_ONLY)
+                            BevyAxisButton::new_negative_only(GamepadAxis::LeftStickY.into())
                                 .into(),
-                            AxisBinding::gamepad_left_stick_x()
-                                .with_modifier(AxisModifier::POSITIVE_ONLY)
+                            BevyAxisButton::new_positive_only(GamepadAxis::LeftStickX.into())
                                 .into(),
-                            AxisBinding::gamepad_left_stick_x()
-                                .with_modifier(AxisModifier::NEGATIVE_ONLY)
+                            BevyAxisButton::new_negative_only(GamepadAxis::LeftStickX.into())
                                 .into(),
                         ])
                         .into(),

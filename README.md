@@ -1,27 +1,39 @@
-Input library for Bevy Game Engine.
+Input to Action Binding library for Bevy Game Engine.
 
 # Features
 
 - Uses bevy_input internally, supports Keyboard, Gamepad, and Mouse.
-- Uses any `Hash + Eq` type for keying input types. 
+- Uses any `InputKey` type for keying input types. 
 - Can produce `Message`'s for common input events.
 - `InputBinding` lets you bind any axis or button to any axis or button like input.
   - `ActionBinding` has internal states to best represent button like behavior: JustPressed, Pressed, JustReleased, Released. Can also be used as digital (-1, 0, 1) axis.
   - `ValueBinding` can return a value (-1.0 to 1.0) from any axis or set of buttons. Can have a stack of generic functions that modify the output. Can be used as a button, by default it is assumed any non-zero value is pressed, but modifiers can enable you to control this behavior more finely.
   - `DualValueBinding` internally behaves as if it is just 2 `ValueBinding`'s.
+- `ButtonChord`s (multiple buttons at once) with configurable settings for resolving clashing inputs.
+- `ButtonCombo`s (multiple sequentially pressed buttons). Think GTA cheats but without incorrect buttons interrupting it.
 
 # Usage
 
-> see `examples/demo.rs` for a more complete control scheme.
+> see `examples/events.rs` to see most of what can be done.
+
+## Binding Types to be aware of
+
+- `BevyInputKind` which is and enum that is either `BevyAxisKind` or `BevyButtonKind`. Both inner types just resolve down to types from `bevy_input`.
+- `BevyAxisButton` this converts an axis to a button. 
+- `ButtonBinding` this what `inlet` uses as an actual binding to a button-like input. uses `BevyButtonKind` and `BevyAxisButton` to detect presses. 
+  - Can be configured to be a Chord (multiple buttons that must be pressed all at once).
+  - Can be configured to be a Combo (multiple buttons pressed one after another).
+- `AxisBinding` this what `inlet` uses as an actual binding to a axis-like input.
+
 
 ## Poll Only
 
 Create a list of input bindings to be used as a key to register bindings and retrieve values.
 
-This type MUST implement `Hash + PartialEq + Eq`
+This type MUST implement `Hash + Clone + Eq`
 
 ```
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     Move,
     Zoom,
@@ -107,7 +119,7 @@ Also create a type that implements `Message`
 > Polling-Based bindings.
 
 ```
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 enum InputTypes {
     Grow,
     Shrink,
@@ -204,7 +216,15 @@ fn accept_events(
 
 Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system to your bevy app.
 
-# In Progress
+## Clash Settings
 
-- Interrupting Combos when an invalid button is pressed, with setting to disable interrupts.
-- Better Clash Detection.
+If you like `Chord`s and have opinions about how inputs that clash should behave: you can configure how that happens.
+
+### Resource
+
+You can spawn  a `ClashSettings` resource (preferably on start up) that all new `InputHandler` will use. The system that updates bindings will automatically insert `InputHandler` on entities that have a `InputBindings` attached to them, acting as a default.
+
+### Component
+
+When you insert `ClashSettings` as a component on an entity that also has an attached `InputBindings` the settings will update and all current input states will reset. This means you can allow player to configure this on a per-player basis.
+
