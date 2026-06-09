@@ -1,4 +1,4 @@
-Input library for Bevy Game Engine.
+Input to Action Binding library for Bevy Game Engine.
 
 # Features
 

@@ -1,3 +1,4 @@
+//! Axis Like related types.
 use std::time::{Duration, Instant};
 
 use bevy::{
@@ -9,8 +10,8 @@ use bevy::{
 };
 
 use crate::{
-    button::{ActionableState, ButtonBinding, ButtonBindingKind, ButtonState},
-    clash_manager::BevyInputKind,
+    BevyInputKind,
+    button::{ActionableState, ButtonBindingKind, ButtonState},
 };
 
 /// Allows you to customize the behavior of an axis.
@@ -90,21 +91,6 @@ pub fn axis_mod_add(value: f32, config: f32) -> f32 {
 
 impl Eq for AxisModifier {}
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct AxisBindingButton {
-    pub binding: ButtonBinding,
-    pub state: ButtonState,
-}
-
-impl From<ButtonBinding> for AxisBindingButton {
-    fn from(value: ButtonBinding) -> Self {
-        Self {
-            binding: value,
-            state: ButtonState::default(),
-        }
-    }
-}
-
 /// Represents mouse changes in the range [-1.0, 1.0].
 ///
 /// ## Usage
@@ -119,6 +105,8 @@ pub enum MouseAxis {
     ScrollY,
 }
 
+/// A Binding to a [`BevyInputKind`] that will be used as an axis, or binding to 2
+/// [`ButtonBindingKind`] that simulate an axis using to button-likes.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AxisBindingKind {
     Single(BevyInputKind),
@@ -129,90 +117,119 @@ pub enum AxisBindingKind {
 }
 
 impl AxisBindingKind {
+    /// Returns a binding that uses the right arrow for positive input and left arrow for negative input
+    /// into the axis.
     pub fn keyboard_right_left() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(KeyCode::ArrowRight.into()),
             minus: Some(KeyCode::ArrowLeft.into()),
         }
     }
+    /// Returns a binding that uses the up arrow for positive input and down arrow for negative input
+    /// into the axis.
     pub fn keyboard_up_down() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(KeyCode::ArrowUp.into()),
             minus: Some(KeyCode::ArrowDown.into()),
         }
     }
+    /// Returns a binding that uses the D key for positive input and A key for negative input
+    /// into the axis.
     pub fn keyboard_da() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(KeyCode::KeyD.into()),
             minus: Some(KeyCode::KeyA.into()),
         }
     }
+    /// Returns a binding that uses the W key for positive input and S key for negative input
+    /// into the axis.
     pub fn keyboard_ws() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(KeyCode::KeyW.into()),
             minus: Some(KeyCode::KeyS.into()),
         }
     }
+    /// Returns a binding to the mouse X motion.
     pub fn mouse_x_motion() -> Self {
         MouseAxis::MotionX.into()
     }
+    /// Returns a binding to the mouse Y motion.
     pub fn mouse_y_motion() -> Self {
         MouseAxis::MotionY.into()
     }
+    /// Returns a binding to the mouse scroll wheels X axis.
     pub fn mouse_x_scroll() -> Self {
         MouseAxis::ScrollX.into()
     }
+    /// Returns a binding to the mouse scroll wheels Y axis.
     pub fn mouse_y_scroll() -> Self {
         MouseAxis::ScrollY.into()
     }
+    /// Returns a binding to the right sticks X axis on a gamepad.
     pub fn gamepad_right_stick_x() -> Self {
         GamepadAxis::RightStickX.into()
     }
+    /// Returns a binding to the right sticks Y axis on a gamepad.
     pub fn gamepad_right_stick_y() -> Self {
         GamepadAxis::RightStickY.into()
     }
+    /// Returns a binding to the left sticks X axis on a gamepad.
     pub fn gamepad_left_stick_x() -> Self {
         GamepadAxis::LeftStickX.into()
     }
+    /// Returns a binding to the left sticks Y axis on a gamepad.
     pub fn gamepad_left_stick_y() -> Self {
         GamepadAxis::LeftStickY.into()
     }
+    /// Returns a binding that uses DPad right for positive input and DPad left for negative input
+    /// into the axis.
     pub fn gamepad_dpad_right_left() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(GamepadButton::DPadRight.into()),
             minus: Some(GamepadButton::DPadLeft.into()),
         }
     }
+    /// Returns a binding that uses DPad up for positive input and DPad down for negative input
+    /// into the axis.
     pub fn gamepad_dpad_up_down() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(GamepadButton::DPadUp.into()),
             minus: Some(GamepadButton::DPadDown.into()),
         }
     }
+    /// Returns a binding that uses the "=/+" key for positive input and "-/_" key for negative input
+    /// into the axis.
     pub fn keyboard_plus_minus() -> Self {
         AxisBindingKind::Buttons {
             plus: Some(KeyCode::Equal.into()),
             minus: Some(KeyCode::Minus.into()),
         }
     }
+    /// Returns a binding that uses `plus` key for positive input and `minus` for negative input
+    /// into the axis.
     pub fn buttons(plus: BevyInputKind, minus: BevyInputKind) -> Self {
         AxisBindingKind::Buttons {
             plus: Some(plus.into()),
             minus: Some(minus.into()),
         }
     }
+    /// Returns a binding that uses `plus` key for positive input and `minus` for negative input
+    /// into the axis. If `None` is used for an input it will never get the accosted value (positive or negative)
     pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
         AxisBindingKind::Buttons {
             plus: plus.map(|asdf| asdf.into()),
             minus: minus.map(|asdf| asdf.into()),
         }
     }
+    /// Returns a binding to a [`GamepadAxis`].
     pub fn gamepad_axis(axis: GamepadAxis) -> Self {
         Self::Single(axis.into())
     }
+    /// Returns a binding to a [`GamepadButton`].
     pub fn gamepad_button(axis: GamepadButton) -> Self {
         Self::Single(axis.into())
     }
+    /// Returns a binding to a [`MouseAxis`].
     pub fn mouse(axis: MouseAxis) -> Self {
         Self::Single(axis.into())
     }
@@ -254,12 +271,18 @@ impl From<(BevyInputKind, BevyInputKind)> for AxisBindingKind {
     }
 }
 
+/// Binding to an axis like. Contains a [`AxisBindingKind`] and a modifier stack.
+///
+/// # Modifier Stack
+///
+/// A list of functions that output values from the axis will go through sequentially when gathered.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AxisBinding {
     kind: AxisBindingKind,
     mod_stack: Vec<AxisModifier>,
 }
 impl AxisBinding {
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         match &self.kind {
@@ -275,67 +298,93 @@ impl AxisBinding {
         }
         out
     }
+    /// Returns a slice of all modifiers in this binding.
     pub fn mods(&self) -> &[AxisModifier] {
         &self.mod_stack
     }
+    /// Builder style function for inserting output modifiers into this binding.
     pub fn with_modifier(mut self, m: AxisModifier) -> Self {
         self.mod_stack.push(m);
         self
     }
+    /// Returns the inner [`AxisBindingKind`].
     pub fn kind(&self) -> &AxisBindingKind {
         &self.kind
     }
-    pub fn kind_mut(&mut self) -> &mut AxisBindingKind {
-        &mut self.kind
-    }
+    /// Returns a binding that uses the right arrow for positive input and left arrow for negative input
+    /// into the axis.
     pub fn keyboard_right_left() -> Self {
         AxisBindingKind::keyboard_right_left().into()
     }
+    /// Returns a binding that uses the up arrow for positive input and down arrow for negative input
+    /// into the axis.
     pub fn keyboard_up_down() -> Self {
         AxisBindingKind::keyboard_up_down().into()
     }
+    /// Returns a binding that uses the D key for positive input and A key for negative input
+    /// into the axis.
     pub fn keyboard_da() -> Self {
         AxisBindingKind::keyboard_da().into()
     }
+    /// Returns a binding that uses the W key for positive input and S key for negative input
+    /// into the axis.
     pub fn keyboard_ws() -> Self {
         AxisBindingKind::keyboard_ws().into()
     }
+    /// Returns a binding to the mouse X motion.
     pub fn mouse_x_motion() -> Self {
         MouseAxis::MotionX.into()
     }
+    /// Returns a binding to the mouse Y motion.
     pub fn mouse_y_motion() -> Self {
         MouseAxis::MotionY.into()
     }
+    /// Returns a binding to the mouse scroll wheels X axis.
     pub fn mouse_x_scroll() -> Self {
         MouseAxis::ScrollX.into()
     }
+    /// Returns a binding to the mouse scroll wheels Y axis.
     pub fn mouse_y_scroll() -> Self {
         MouseAxis::ScrollY.into()
     }
+    /// Returns a binding to the right sticks X axis on a gamepad.
     pub fn gamepad_right_stick_x() -> Self {
         GamepadAxis::RightStickX.into()
     }
+    /// Returns a binding to the right sticks Y axis on a gamepad.
     pub fn gamepad_right_stick_y() -> Self {
         GamepadAxis::RightStickY.into()
     }
+    /// Returns a binding to the left sticks X axis on a gamepad.
     pub fn gamepad_left_stick_x() -> Self {
         GamepadAxis::LeftStickX.into()
     }
+    /// Returns a binding to the left sticks Y axis on a gamepad.
     pub fn gamepad_left_stick_y() -> Self {
         GamepadAxis::LeftStickY.into()
     }
+    /// Returns a binding that uses DPad right for positive input and DPad left for negative input
+    /// into the axis.
     pub fn gamepad_dpad_right_left() -> Self {
         AxisBindingKind::gamepad_dpad_right_left().into()
     }
+    /// Returns a binding that uses DPad up for positive input and DPad down for negative input
+    /// into the axis.
     pub fn gamepad_dpad_up_down() -> Self {
         AxisBindingKind::gamepad_dpad_up_down().into()
     }
+    /// Returns a binding that uses the "=/+" key for positive input and "-/_" key for negative input
+    /// into the axis.
     pub fn keyboard_plus_minus() -> Self {
         AxisBindingKind::keyboard_plus_minus().into()
     }
+    /// Returns a binding that uses `plus` key for positive input and `minus` for negative input
+    /// into the axis.
     pub fn buttons(plus: BevyInputKind, minus: BevyInputKind) -> Self {
         AxisBindingKind::buttons(plus, minus).into()
     }
+    /// Returns a binding that uses `plus` key for positive input and `minus` for negative input
+    /// into the axis. If `None` is used for an input it will never get the accosted value (positive or negative)
     pub fn buttons_optional(plus: Option<BevyInputKind>, minus: Option<BevyInputKind>) -> Self {
         AxisBindingKind::Buttons {
             plus: plus.map(|asdf| asdf.into()),
@@ -343,18 +392,22 @@ impl AxisBinding {
         }
         .into()
     }
+    /// Returns a binding to a [`GamepadAxis`].
     pub fn gamepad_axis(axis: GamepadAxis) -> Self {
         let kind: AxisBindingKind = axis.into();
         kind.into()
     }
+    /// Returns a binding to a [`GamepadButton`].
     pub fn gamepad_button(axis: GamepadButton) -> Self {
         let kind: AxisBindingKind = axis.into();
         kind.into()
     }
+    /// Returns a binding to a [`MouseAxis`].
     pub fn mouse(axis: MouseAxis) -> Self {
         let kind: AxisBindingKind = axis.into();
         kind.into()
     }
+    /// Builder style function that inserts a invert modifier to the modifier stack.
     pub fn invert(self) -> Self {
         self.with_modifier(AxisModifier::INVERT.clone())
     }
@@ -397,6 +450,7 @@ impl From<(BevyInputKind, BevyInputKind)> for AxisBinding {
     }
 }
 
+/// The state of a [`ValueBinding`]. Mostly used to easily convert axis-like states to a button like state.
 pub struct ValueState {
     pub(crate) previous: f32,
     /// The last value feed into this binding.
@@ -406,6 +460,7 @@ pub struct ValueState {
 }
 
 impl ValueState {
+    /// Outputs an equivalent [`ButtonState`] for `self`.
     #[inline]
     pub fn action_state(&self) -> ButtonState {
         ButtonState {
@@ -425,10 +480,12 @@ impl ValueState {
             start: self.last_transition,
         }
     }
+    /// Most recent value passed into [`Self::feed`].
     #[inline]
     pub fn current(&self) -> f32 {
         self.current
     }
+    /// Second most recent value passed into [`Self::feed`].
     #[inline]
     pub fn previous(&self) -> f32 {
         self.previous
@@ -437,8 +494,14 @@ impl ValueState {
     /// - 0 to a non-zero value.
     /// - A non-zero value to 0.
     #[inline]
-    pub fn last_transition(&self) -> Duration {
+    pub fn elapsed_last_transition(&self) -> Duration {
         self.last_transition.elapsed()
+    }
+    /// Returns the [`Instant`] from the last time the internal state transitioned from:
+    /// - 0 to a non-zero value.
+    /// - A non-zero value to 0.
+    pub fn last_transition(&self) -> Instant {
+        self.last_transition
     }
     /// Returns `true` if [`Self::current`] would return a zero non-zero value and [`Self::current`] would return zero.
     #[inline]
@@ -495,6 +558,20 @@ impl Default for ValueState {
     }
 }
 
+/// Collection of [`AxisBinding`] and a state to use for all of them.
+///
+/// # Modifier Stack
+///
+/// A collections of [`AxisModifier`] which are functions that change the output of a axis-like value.
+///
+/// Each [`AxisBinding`] has its own modifier stack, but this type also has its own that is applied to all inputs after
+/// their own stack is completed.
+///
+/// # Event
+///
+/// This stores a function that gets called when the internal state is feed a value. The functions thats a `f32`
+/// value from the axis and returns an [`Option<T>`]. If returned option is `Some` the value will be sent as
+/// a [`Message`](bevy::prelude::Message).
 pub struct ValueBinding<T> {
     pub(crate) bindings: Vec<AxisBinding>,
     pub(crate) mod_stack: Vec<AxisModifier>,
@@ -504,6 +581,7 @@ pub struct ValueBinding<T> {
 }
 
 impl<T> ValueBinding<T> {
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         for b in &self.bindings {
@@ -511,12 +589,17 @@ impl<T> ValueBinding<T> {
         }
         out
     }
+    /// Returns a reference to internal [`ValueState`].
     pub fn state(&self) -> &ValueState {
         &self.state
     }
+    /// Returns the [`Instant`] from the last time the internal state transitioned from:
+    /// - 0 to a non-zero value.
+    /// - A non-zero value to 0.
     pub fn last_transition(&self) -> Instant {
         self.state.last_transition
     }
+    /// Most recent axis value feed into internal state.
     pub fn value(&self) -> f32 {
         self.state.current
     }
@@ -526,6 +609,9 @@ impl<T> ValueBinding<T> {
     pub fn bindings_mut(&mut self) -> &mut [AxisBinding] {
         &mut self.bindings
     }
+    /// Feeds the internal state a new value.
+    ///
+    /// This is what the `inlet` system calls to update the state of a binding. You shouldn't need to call this.
     pub fn feed(&mut self, value: f32) -> Option<T> {
         self.state.feed(value);
         (self.event)(self.value())
@@ -623,6 +709,7 @@ pub struct DualValueBinding<T> {
     pub(crate) y_mock: Option<f32>,
 }
 impl<T> DualValueBinding<T> {
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         for b in &self.x_bindings {
@@ -633,12 +720,19 @@ impl<T> DualValueBinding<T> {
         }
         out
     }
+    /// Returns a reference to internal [`ValueState`] for the X axis.
     pub fn x_state(&self) -> &ValueState {
         &self.x_state
     }
+    /// Returns a reference to internal [`ValueState`] for the Y axis.
     pub fn y_state(&self) -> &ValueState {
         &self.y_state
     }
+    /// Returns the [`Instant`] from the last time the internal state transitioned from:
+    /// - 0 to a non-zero value.
+    /// - A non-zero value to 0.
+    ///
+    /// Checks both X and Y axis and returns the most recently transitioned.
     pub fn last_transition(&self) -> Instant {
         let x = self.x_state.last_transition;
         let y = self.y_state.last_transition;
@@ -656,11 +750,15 @@ impl<T> DualValueBinding<T> {
     pub fn y_bindings_mut(&mut self) -> &mut [AxisBinding] {
         &mut self.y_bindings
     }
+    /// Feeds the internal states for each axis a new value.
+    ///
+    /// This is what the `inlet` system calls to update the state of a binding. You shouldn't need to call this.
     pub fn feed(&mut self, value: Vec2) -> Option<T> {
         self.x_state.feed(value.x);
         self.y_state.feed(value.y);
         (self.event)(self.value())
     }
+    /// Most recent axis value feed into internal state.
     pub fn value(&self) -> Vec2 {
         Vec2::new(self.x_state.current, self.y_state.current)
     }

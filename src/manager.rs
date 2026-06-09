@@ -1,3 +1,4 @@
+//! [`InputHandler`] related types.
 use std::{
     fmt::Display,
     time::{Duration, Instant},
@@ -7,122 +8,14 @@ use bevy::{
     ecs::{component::Component, resource::Resource},
     input::{
         ButtonInput,
-        gamepad::{Gamepad, GamepadAxis, GamepadButton},
+        gamepad::Gamepad,
         keyboard::KeyCode,
         mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseButton},
     },
     platform::collections::{HashMap, hash_map::Entry},
 };
 
-use crate::{InputBinding, axis::MouseAxis, pressed_to_value, value_to_press};
-
-/// A enum of all supported `bevy_input` types that can be used as axis-like bindings.
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum BevyAxisKind {
-    MouseAxis(MouseAxis),
-    GamepadAxis(GamepadAxis),
-    GamepadButton(GamepadButton),
-}
-
-impl From<MouseAxis> for BevyAxisKind {
-    fn from(value: MouseAxis) -> Self {
-        Self::MouseAxis(value)
-    }
-}
-
-impl From<GamepadAxis> for BevyAxisKind {
-    fn from(value: GamepadAxis) -> Self {
-        Self::GamepadAxis(value)
-    }
-}
-
-impl From<GamepadButton> for BevyAxisKind {
-    fn from(value: GamepadButton) -> Self {
-        Self::GamepadButton(value)
-    }
-}
-
-/// A enum of all supported `bevy_input` types that can be used as button-like bindings.
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum BevyButtonKind {
-    GamepadButton(GamepadButton),
-    KeyCode(KeyCode),
-    MouseButton(MouseButton),
-}
-
-impl From<GamepadButton> for BevyButtonKind {
-    fn from(value: GamepadButton) -> Self {
-        Self::GamepadButton(value)
-    }
-}
-
-impl From<KeyCode> for BevyButtonKind {
-    fn from(value: KeyCode) -> Self {
-        Self::KeyCode(value)
-    }
-}
-
-impl From<MouseButton> for BevyButtonKind {
-    fn from(value: MouseButton) -> Self {
-        Self::MouseButton(value)
-    }
-}
-
-/// A enum of all supported `bevy_input` types that can be used as bindings.
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum BevyInputKind {
-    /// An button-kind from `bevy_input`.
-    Button(BevyButtonKind),
-    /// An axis-kind from `bevy_input`.
-    Axis(BevyAxisKind),
-}
-
-impl From<BevyButtonKind> for BevyInputKind {
-    fn from(value: BevyButtonKind) -> Self {
-        Self::Button(value)
-    }
-}
-
-impl From<BevyAxisKind> for BevyInputKind {
-    fn from(value: BevyAxisKind) -> Self {
-        Self::Axis(value)
-    }
-}
-
-impl From<MouseAxis> for BevyInputKind {
-    fn from(value: MouseAxis) -> Self {
-        let new: BevyAxisKind = value.into();
-        new.into()
-    }
-}
-
-impl From<GamepadAxis> for BevyInputKind {
-    fn from(value: GamepadAxis) -> Self {
-        let new: BevyAxisKind = value.into();
-        new.into()
-    }
-}
-
-impl From<GamepadButton> for BevyInputKind {
-    fn from(value: GamepadButton) -> Self {
-        let new: BevyButtonKind = value.into();
-        new.into()
-    }
-}
-
-impl From<KeyCode> for BevyInputKind {
-    fn from(value: KeyCode) -> Self {
-        let new: BevyButtonKind = value.into();
-        new.into()
-    }
-}
-
-impl From<MouseButton> for BevyInputKind {
-    fn from(value: MouseButton) -> Self {
-        let new: BevyButtonKind = value.into();
-        new.into()
-    }
-}
+use crate::{BevyAxisKind, BevyButtonKind, BevyInputKind, InputBinding, InputValue};
 
 /// Current state of an input.
 #[derive(Debug, Default)]
@@ -170,52 +63,6 @@ impl Display for InputStateKind {
             InputStateKind::Clashing(len) => write!(f, "Clashing({len})"),
             InputStateKind::Buffered(_, len) => write!(f, "Buffered({len})"),
             InputStateKind::Active(len) => write!(f, "Active({len})"),
-        }
-    }
-}
-
-/// A value from any input.
-#[derive(Debug, Clone)]
-pub enum InputValue {
-    /// Input was a button.
-    Pressed(bool),
-    /// Input was a axis.
-    Value(f32),
-}
-
-impl From<f32> for InputValue {
-    fn from(value: f32) -> Self {
-        Self::Value(value)
-    }
-}
-impl From<bool> for InputValue {
-    fn from(value: bool) -> Self {
-        Self::Pressed(value)
-    }
-}
-impl Default for InputValue {
-    fn default() -> Self {
-        Self::Pressed(false)
-    }
-}
-
-impl InputValue {
-    /// Returns true if `self` is:
-    /// - `Self::Button(true)`.
-    /// - `Self::Value(val)` where `val != 0`.
-    pub fn is_pressed(&self) -> bool {
-        match self {
-            InputValue::Pressed(p) => *p,
-            InputValue::Value(val) => value_to_press(*val),
-        }
-    }
-    /// Returns:
-    /// - `1.0` if `Self::Button(true)`, `0.0` if `Self::Button(false)`.
-    /// - `val` when `Self::Value(val)`.
-    pub fn get_value(&self) -> f32 {
-        match self {
-            InputValue::Pressed(p) => pressed_to_value(*p),
-            InputValue::Value(val) => *val,
         }
     }
 }

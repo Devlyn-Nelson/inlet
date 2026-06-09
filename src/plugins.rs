@@ -8,14 +8,16 @@ use bevy::{
 
 use crate::{BindEvent, SimpleMessage, systems::gather_button_inputs};
 
+/// [`InputManagementPlugin`] where the [`Message`](bevy::prelude::Message) type is already filled with a
+/// placeholder for cases where the input manager will not be emitting input events for [`SimpleMessage`]
+/// is good enough for you.
 pub type InputManagementPluginSimple<K> = InputManagementPlugin<K, SimpleMessage>;
 
 pub trait InputKey: Hash + Eq + Clone {}
 
 impl<T> InputKey for T where T: Hash + Eq + Clone {}
 
-/// This will generate or load chunks based off the transforms of any entity with a [`ActiveChunkPosition`]
-/// component on them, a sphere of chunks will load around those positions with the [`ChunksSettings`] width.
+/// Plugin required for [`InputBindings`](crate::InputBindings) to function.
 pub struct InputManagementPlugin<K, I>(PhantomData<K>, PhantomData<I>);
 impl<K, I> Plugin for InputManagementPlugin<K, I>
 where

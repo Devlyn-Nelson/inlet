@@ -10,10 +10,10 @@ use bevy::{
 };
 
 use crate::{
-    BindEvent, InputBindings,
+    BindEvent, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    clash_manager::{ClashSettings, InputHandler, InputValue},
+    manager::{ClashSettings, InputHandler},
     plugins::InputKey,
     pressed_to_value,
 };

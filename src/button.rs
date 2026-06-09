@@ -1,3 +1,4 @@
+//! Button Like related types.
 use std::time::{Duration, Instant};
 
 use bevy::{
@@ -6,10 +7,12 @@ use bevy::{
 };
 
 use crate::{
-    axis::ValueState,
-    clash_manager::{BevyAxisKind, BevyButtonKind, BevyInputKind, InputValue},
-    value_to_press,
+    BevyAxisKind, BevyButtonKind, BevyInputKind, InputValue, axis::ValueState, value_to_press,
 };
+
+/// Creates a button like binding from an axis like binding.
+///
+/// Can also be given a custom function for determining how the axis values should be translated to presses.
 #[allow(unpredictable_function_pointer_comparisons)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BevyAxisButton {
@@ -73,6 +76,8 @@ fn positive_only(asdf: f32) -> bool {
     asdf > 0.
 }
 
+/// The type of button like binding. This is a replacement for [`BevyInputKind`] that
+/// allows for more control over how axis values should be translated to button like values.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ButtonBindingKind {
     Standard(BevyButtonKind),
@@ -154,6 +159,7 @@ impl ButtonChord {
     pub fn len(&self) -> usize {
         self.actions.len()
     }
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         self.actions.iter().map(|asdf| asdf.kind()).collect()
     }
@@ -169,6 +175,7 @@ impl ButtonChord {
     }
 }
 
+/// Rules for how to determine if a [`ButtonCombo`] can progress.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonComboRules {
     None,
@@ -191,6 +198,7 @@ impl ButtonCombo {
     pub fn bindings(&self) -> &[ButtonBindingKind] {
         &self.actions
     }
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         self.actions.iter().map(|a| a.kind()).collect()
     }
@@ -327,17 +335,19 @@ impl ButtonCombo {
     }
 }
 
+/// An individual binding for a button like.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ButtonBinding {
     /// A set of [`ButtonBinding`] that must all be active at once to be active.
     Chord(ButtonChord),
     /// A set of [`ButtonBinding`] that must be pressed one after another to become active.
     Combo(ButtonCombo),
-    /// standard button from bevy inputs
+    /// Standard button from bevy inputs
     Single(ButtonBindingKind),
 }
 
 impl ButtonBinding {
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::with_capacity(1);
         match self {
@@ -400,6 +410,7 @@ pub struct ButtonState {
 }
 
 impl ButtonState {
+    /// Returns an equivalent [`ValueState`] of `self`.
     pub fn value_state(&self) -> ValueState {
         let (previous, current) = match self.kind {
             ActionableState::Released => (0., 0.),
@@ -413,6 +424,7 @@ impl ButtonState {
             last_transition: self.start,
         }
     }
+    /// Returns the current [`ActionableState`].
     pub fn kind(&self) -> &ActionableState {
         &self.kind
     }
@@ -549,15 +561,19 @@ impl ActionableState {
             }
         }
     }
+    /// Returns `true` if self is [`Self::JustReleased`] or [`Self::Released`].
     pub fn is_released(&self) -> bool {
         matches!(self, Self::JustReleased | Self::Released)
     }
+    /// Returns `true` if self is [`Self::JustPressed`] or [`Self::Pressed`].
     pub fn is_pressed(&self) -> bool {
         matches!(self, Self::JustPressed | Self::Pressed)
     }
+    /// Returns `true` if self is [`Self::JustPressed`].
     pub fn is_just_pressed(&self) -> bool {
         matches!(self, Self::JustPressed)
     }
+    /// Returns `true` if self is [`Self::JustReleased`].
     pub fn is_just_released(&self) -> bool {
         matches!(self, Self::JustReleased)
     }
@@ -577,6 +593,7 @@ pub struct ActionBinding<T> {
 }
 
 impl<T> ActionBinding<T> {
+    /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
         for b in &self.bindings {
@@ -649,6 +666,11 @@ impl<T> ActionBinding<T> {
     /// Returns a reference to the current state of the binding.
     pub fn state(&self) -> &ButtonState {
         &self.state
+    }
+
+    /// Returns elapsed [`Duration`] since the last time the fist pressed or first released.
+    pub fn last_transition(&self) -> Duration {
+        self.state.last_transition()
     }
 
     /// Feeds the state of the binding and returns a `T` if configured to do so for the current state.
@@ -739,7 +761,7 @@ pub enum ButtonEventBinding<T> {
         event: fn() -> T,
     },
     /// Passes the [`Duration`] the state has been Pressed into your function allowing you to optionally return
-    /// a [`Message`] if you want it sent.
+    /// a [`Message`](bevy::prelude::Message) if you want it sent.
     CapturePressDuration(fn(Duration) -> Option<T>),
     /// When the state transitions to `JustReleased`.
     WhenReleased(fn() -> T),
