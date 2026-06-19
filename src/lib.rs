@@ -494,6 +494,16 @@ pub struct InputBindings<K, T: BindEvent> {
     pub(crate) changed: bool,
 }
 
+impl<K, T> Default for InputBindings<K, T>
+where
+    K: Eq + Hash,
+    T: BindEvent,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, T> InputBindings<K, T>
 where
     K: Eq + Hash,
@@ -574,7 +584,7 @@ where
     /// Returns a [`ButtonState`] that describes the state if the [`InputBinding`] mapped to key `K`.
     pub fn get_action_state(&self, name: &K) -> ButtonState {
         self.get_binding(name)
-            .map(|binding| binding.state().clone())
+            .map(|binding| binding.state())
             .unwrap_or_default()
     }
     /// Returns `true` if the state of the [`InputBinding`] mapped to key `K` could be considered

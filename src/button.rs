@@ -121,7 +121,7 @@ impl From<GamepadButton> for ButtonBindingKind {
 
 impl From<BevyButtonKind> for ButtonBindingKind {
     fn from(value: BevyButtonKind) -> Self {
-        Self::Standard(value.into())
+        Self::Standard(value)
     }
 }
 
@@ -158,6 +158,9 @@ impl ButtonChord {
     }
     pub fn len(&self) -> usize {
         self.actions.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.actions.is_empty()
     }
     /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {

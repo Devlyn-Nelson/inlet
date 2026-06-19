@@ -13,7 +13,7 @@ use crate::{
     BindEvent, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    manager::{ClashSettings, InputHandler},
+    manager::{ClashSettings, DefaultClashSettings, InputHandler},
     plugins::InputKey,
     pressed_to_value,
 };
@@ -77,7 +77,7 @@ pub fn gather_button_inputs<K, T>(
         Option<&ClashSettings>,
     )>,
     gamepad_query: Query<&Gamepad>,
-    default_clash_settings: Option<Res<ClashSettings>>,
+    default_clash_settings: Option<Res<DefaultClashSettings>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
@@ -91,7 +91,7 @@ pub fn gather_button_inputs<K, T>(
         let Some(input_handler) = &mut input_handler else {
             if let Ok(mut e_cmds) = commands.get_entity(entity) {
                 let handler = if let Some(asdf) = &default_clash_settings {
-                    (**asdf).into()
+                    (***asdf).into()
                 } else {
                     InputHandler::default()
                 };
@@ -158,7 +158,7 @@ pub fn gather_button_inputs<K, T>(
                             ButtonBinding::Combo(button_combo) => {
                                 // Either differ to re-poll or check if the next expected button is pressed.
                                 let expected = button_combo.expected_binding_mut();
-                                let out = input_handler.poll(&vec![expected.kind()]);
+                                let out = input_handler.poll(&[expected.kind()]);
                                 if let Some(o) = out {
                                     if expected.apply(o) {
                                         Some(
@@ -280,7 +280,7 @@ pub fn gather_button_inputs<K, T>(
                                 }
                                 ButtonBinding::Combo(button_combo) => {
                                     let b = button_combo.expected_binding_mut();
-                                    let out = input_handler.repoll(&vec![b.kind()]);
+                                    let out = input_handler.repoll(&[b.kind()]);
                                     if b.apply(out) {
                                         expected_is_pressed(button_combo, input_handler)
                                             .is_pressed()

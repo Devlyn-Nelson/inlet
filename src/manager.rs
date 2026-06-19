@@ -1,6 +1,7 @@
 //! [`InputHandler`] related types.
 use std::{
     fmt::Display,
+    ops::{Deref, DerefMut},
     time::{Duration, Instant},
 };
 
@@ -77,6 +78,23 @@ struct InputState {
     value: InputValue,
 }
 
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct DefaultClashSettings(pub ClashSettings);
+
+impl Deref for DefaultClashSettings {
+    type Target = ClashSettings;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for DefaultClashSettings {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 /// The settings to use for resolving clashing inputs.
 ///
 /// # Component
@@ -87,8 +105,9 @@ struct InputState {
 ///
 /// Defines a default settings that new [`InputHandler`] can pull from.
 ///
-#[derive(Resource, Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug)]
 /// component to avoid extra checks.
+#[derive(Default)]
 pub enum ClashSettings {
     /// Does not buffer inputs, just detects clashes. Inputs that may clash will be re-checked after all inputs
     /// have had a chance to assert their priority.
@@ -98,6 +117,7 @@ pub enum ClashSettings {
     /// - If a high priority binding captures a button, that button must be released before a lower priority
     ///   binding can see it again.
     ///
+    #[default]
     Unbuffered,
     /// Buffers inputs that can clash until a timer runs out or unpressed.
     ///
@@ -143,14 +163,10 @@ impl ClashSettings {
     }
 }
 
-impl Default for ClashSettings {
-    fn default() -> Self {
-        ClashSettings::Unbuffered
-    }
-}
 
 /// Management of a players bindings and the states.
 #[derive(Component)]
+#[derive(Default)]
 pub struct InputHandler {
     /// a counter that is increased when ever `Self::tick` is called.
     frame: usize,
@@ -170,15 +186,6 @@ impl From<ClashSettings> for InputHandler {
     }
 }
 
-impl Default for InputHandler {
-    fn default() -> Self {
-        Self {
-            frame: 0,
-            clashables: HashMap::default(),
-            settings: ClashSettings::default(),
-        }
-    }
-}
 
 #[derive(PartialEq, Eq)]
 enum Outy {
@@ -267,7 +274,7 @@ impl InputHandler {
     ///
     /// If `None` is returned then you must [`Self::repoll`] after all inputs have been polled
     pub(crate) fn poll(&mut self, clashable: &[BevyInputKind]) -> Option<InputValue> {
-        if clashable.len() == 0 {
+        if clashable.is_empty() {
             return Some(InputValue::default());
         }
         // Are all inputs pressed
@@ -275,7 +282,7 @@ impl InputHandler {
         // the buffered input with the oldest instant.
         let mut oldest_press = Ok(Instant::now());
         for c in clashable.iter() {
-            match self.clashables.entry(c.clone()) {
+            match self.clashables.entry(*c) {
                 Entry::Occupied(o) => {
                     if o.get().value.is_pressed() {
                         if let InputStateKind::Buffered(start, _) = &o.get().kind {
@@ -301,11 +308,7 @@ impl InputHandler {
                 }
             }
         }
-        let oldest_press = if let Err(o) = oldest_press {
-            Some(o)
-        } else {
-            None
-        };
+        let oldest_press = oldest_press.err();
         let mut repoll = if pressed { Outy::Show } else { Outy::Hide };
         let chord_length = clashable.len();
         for c in clashable.iter() {
@@ -334,11 +337,10 @@ impl InputHandler {
                         }
                     }
                     InputStateKind::Buffered(instant, len) => {
-                        if let Some(oldest) = oldest_press {
-                            if oldest < *instant {
+                        if let Some(oldest) = oldest_press
+                            && oldest < *instant {
                                 *instant = oldest;
                             }
-                        }
                         if chord_length > *len {
                             Some(InputStateKind::buffered_with_instant(
                                 chord_length,
@@ -403,7 +405,7 @@ impl InputHandler {
     ///
     /// It is expected that this is only ever called on inputs that got a `None` from [`Self::poll`].
     pub(crate) fn repoll(&self, clashable: &[BevyInputKind]) -> InputValue {
-        if clashable.len() == 0 {
+        if clashable.is_empty() {
             return InputValue::default();
         }
         for c in clashable.iter() {
