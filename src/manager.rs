@@ -182,7 +182,7 @@ impl ClashSettings {
 }
 
 /// Management of a players bindings and the states.
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct InputHandler {
     /// a counter that is increased when ever `Self::tick` is called.
     frame: usize,
@@ -203,6 +203,12 @@ impl From<ClashSettings> for InputHandler {
             settings: value,
             coord_regretion: false,
         }
+    }
+}
+
+impl Default for InputHandler {
+    fn default() -> Self {
+        Self::from(ClashSettings::default())
     }
 }
 
@@ -308,6 +314,7 @@ impl InputHandler {
     pub fn update_list<K, T>(&mut self, map: &HashMap<K, InputBinding<T>>) {
         let clashables: Vec<BevyInputKind> =
             map.values().flat_map(|asdf| asdf.input_kinds()).collect();
+        // TODO need to provide a way to clean up unused inputs.
         // self.clashables.clear();
         for c in clashables.into_iter() {
             match self.clashables.entry(c) {
@@ -451,6 +458,7 @@ impl InputHandler {
                     last_coord_len: coord_len,
                     ..
                 } => {
+                    bevy::log::info!("{c:?} = {coord_len}");
                     if *coord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
                         repoll = Outy::Hide;
                     }
