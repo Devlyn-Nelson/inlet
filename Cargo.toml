@@ -1,6 +1,6 @@
 [package]
 name = "inlet"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "Input management with configurable bindings for Bevy game engine."
 authors = ["Dev <devlynknelson@gmail.com>"]
@@ -8,8 +8,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Devlyn-Nelson/inlet"
 categories = ["games", "game-development"]
 keywords = ["bevy"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.bevy]
 version = "0.19"

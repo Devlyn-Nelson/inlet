@@ -6,7 +6,7 @@ use bevy::{
     input::InputSystems,
 };
 
-use crate::{BindEvent, SimpleMessage, systems::gather_button_inputs};
+use crate::{BindEvent, SimpleMessage, systems::system_gather_button_inputs};
 
 /// [`InputManagementPlugin`] where the [`Message`](bevy::prelude::Message) type is already filled with a
 /// placeholder for cases where the input manager will not be emitting input events for [`SimpleMessage`]
@@ -25,8 +25,11 @@ where
     I: BindEvent + Sync + Send + 'static,
 {
     fn build(&self, app: &mut bevy::prelude::App) {
-        app.add_systems(PreUpdate, gather_button_inputs::<K, I>.after(InputSystems))
-            .add_message::<I>();
+        app.add_systems(
+            PreUpdate,
+            system_gather_button_inputs::<K, I>.after(InputSystems),
+        )
+        .add_message::<I>();
     }
 }
 

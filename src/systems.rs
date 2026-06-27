@@ -67,7 +67,7 @@ fn expected_is_pressed(
     }
 }
 
-pub fn gather_button_inputs<K, T>(
+pub fn system_gather_button_inputs<K, T>(
     mut commands: Commands,
     mut writer: MessageWriter<T>,
     mut bindings: Query<(

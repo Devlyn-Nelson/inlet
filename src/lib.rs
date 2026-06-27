@@ -509,20 +509,13 @@ where
     K: Eq + Hash,
     T: BindEvent,
 {
-    /// Builder style function for mapping an action to a [`InputBinding::Action`].
-    pub fn with_action_binding(mut self, name: K, bindings: ActionBinding<T>) -> Self {
-        self.register_action_binding(name, bindings);
-        self
-    }
-    /// Builder style function for mapping an action to a [`InputBinding::Value`].
-    pub fn with_value_binding(mut self, name: K, bindings: ValueBinding<T>) -> Self {
-        self.register_value_binding(name, bindings);
-        self
-    }
-    /// Builder style function for mapping an action to a [`InputBinding::DualValue`].
-    pub fn with_dual_value_binding(mut self, name: K, bindings: DualValueBinding<T>) -> Self {
-        self.register_dual_value_binding(name, bindings);
-        self
+    /// Returns a new blank instance.
+    pub fn new() -> Self {
+        Self {
+            bindings: HashMap::default(),
+            assigned_gamepad: None,
+            changed: true,
+        }
     }
     pub(crate) fn change(&mut self) {
         self.changed = true;
@@ -530,12 +523,7 @@ where
     /// Returns `true` when binding detects changes to inner map. The input system should also set changed
     /// when a new [`ClashSettings`](crate::manager::ClashSettings) is applied.
     pub(crate) fn changed(&mut self) -> bool {
-        if self.changed {
-            self.changed = false;
-            true
-        } else {
-            false
-        }
+        std::mem::take(&mut self.changed)
     }
     pub fn register_binding(
         &mut self,
@@ -569,13 +557,20 @@ where
     ) -> Option<InputBinding<T>> {
         self.register_binding(name, InputBinding::DualValue(bindings))
     }
-    /// Returns a new blank instance.
-    pub fn new() -> Self {
-        Self {
-            bindings: HashMap::default(),
-            assigned_gamepad: None,
-            changed: false,
-        }
+    /// Builder style function for mapping an action to a [`InputBinding::Action`].
+    pub fn with_action_binding(mut self, name: K, bindings: ActionBinding<T>) -> Self {
+        self.register_action_binding(name, bindings);
+        self
+    }
+    /// Builder style function for mapping an action to a [`InputBinding::Value`].
+    pub fn with_value_binding(mut self, name: K, bindings: ValueBinding<T>) -> Self {
+        self.register_value_binding(name, bindings);
+        self
+    }
+    /// Builder style function for mapping an action to a [`InputBinding::DualValue`].
+    pub fn with_dual_value_binding(mut self, name: K, bindings: DualValueBinding<T>) -> Self {
+        self.register_dual_value_binding(name, bindings);
+        self
     }
     /// Returns mapped [`InputBinding`] for key `K`.
     pub fn get_binding(&self, name: &K) -> Option<&InputBinding<T>> {
