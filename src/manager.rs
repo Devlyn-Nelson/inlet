@@ -1,6 +1,7 @@
 //! [`InputHandler`] related types.
 use std::{
     fmt::Display,
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     time::{Duration, Instant},
 };
@@ -96,6 +97,7 @@ struct InputState {
     value: InputValue,
 }
 
+/// A Resource that defines default clash settings for newly created [`InputManagers`].
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct DefaultClashSettings(pub ClashSettings);
 
@@ -181,6 +183,15 @@ impl ClashSettings {
     }
 }
 
+pub enum ComboSettings {
+    /// Combos don't get cancelled by incorrect inputs.
+    NoBreak,
+    /// Combos will cancel if a button that isn't the expected button is pressed.
+    ButtonsBreak,
+    /// Any incorrect input (buttons or axis) will cancel a combo.
+    AnythingBreaks,
+}
+
 /// Management of a players bindings and the states.
 #[derive(Component)]
 pub struct InputHandler {
@@ -193,6 +204,7 @@ pub struct InputHandler {
     /// reset the coord length on tick so that smaller coords can become active
     /// after releasing a larger coord.
     coord_regretion: bool,
+    buttons_pressed_this_frame: usize,
 }
 
 impl From<ClashSettings> for InputHandler {
@@ -202,6 +214,7 @@ impl From<ClashSettings> for InputHandler {
             clashables: HashMap::default(),
             settings: value,
             coord_regretion: false,
+            buttons_pressed_this_frame: 0,
         }
     }
 }
@@ -211,6 +224,10 @@ impl Default for InputHandler {
         Self::from(ClashSettings::default())
     }
 }
+
+/// Disables a InputManger with types `T` and `K`.
+#[derive(Debug, Default, Component)]
+pub struct DisableInputManager<K, T>(PhantomData<T>, PhantomData<K>);
 
 #[derive(PartialEq, Eq)]
 enum Outy {
@@ -309,6 +326,7 @@ impl InputHandler {
             }
         }
         self.frame += 1;
+        self.buttons_pressed_this_frame = 0;
     }
     /// Updates the internal binding map and resets all states.
     pub fn update_list<K, T>(&mut self, map: &HashMap<K, InputBinding<T>>) {
@@ -458,7 +476,6 @@ impl InputHandler {
                     last_coord_len: coord_len,
                     ..
                 } => {
-                    bevy::log::info!("{c:?} = {coord_len}");
                     if *coord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
                         repoll = Outy::Hide;
                     }

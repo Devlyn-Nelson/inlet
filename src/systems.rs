@@ -1,5 +1,5 @@
 use bevy::{
-    ecs::{entity::Entity, system::Commands, world::Mut},
+    ecs::{entity::Entity, query::Without, system::Commands, world::Mut},
     input::{
         ButtonInput,
         gamepad::Gamepad,
@@ -13,7 +13,7 @@ use crate::{
     BindEvent, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    manager::{ClashSettings, DefaultClashSettings, InputHandler},
+    manager::{ClashSettings, DefaultClashSettings, DisableInputManager, InputHandler},
     plugins::InputKey,
     pressed_to_value,
 };
@@ -70,12 +70,15 @@ fn expected_is_pressed(
 pub fn system_gather_button_inputs<K, T>(
     mut commands: Commands,
     mut writer: MessageWriter<T>,
-    mut bindings: Query<(
-        Entity,
-        &mut InputBindings<K, T>,
-        Option<&mut InputHandler>,
-        Option<&ClashSettings>,
-    )>,
+    mut bindings: Query<
+        (
+            Entity,
+            &mut InputBindings<K, T>,
+            Option<&mut InputHandler>,
+            Option<&ClashSettings>,
+        ),
+        Without<DisableInputManager<K, T>>,
+    >,
     gamepad_query: Query<&Gamepad>,
     default_clash_settings: Option<Res<DefaultClashSettings>>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -156,6 +159,7 @@ pub fn system_gather_button_inputs<K, T>(
                                 .poll(&button_chord.input_kinds())
                                 .map(|v| button_chord.apply(v)),
                             ButtonBinding::Combo(button_combo) => {
+                                let add_combo_breaking = 0;
                                 // Either differ to re-poll or check if the next expected button is pressed.
                                 let expected = button_combo.expected_binding_mut();
                                 let out = input_handler.poll(&[expected.kind()]);
