@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::prelude::*;
 use inlet::{
     InputBindings, InputManagementPlugin,
@@ -103,6 +105,7 @@ fn setup(
                             KeyCode::KeyD.into(),
                             KeyCode::KeyA.into(),
                         ])
+                        .with_tolerance(Duration::from_secs(3))
                         .into(),
                         // Up -> Down -> Right -> Left on dpad
                         ButtonCombo::new_default_rules(vec![

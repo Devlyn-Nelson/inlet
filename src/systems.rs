@@ -13,7 +13,10 @@ use crate::{
     BindEvent, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    manager::{ClashSettings, DefaultClashSettings, DisableInputManager, InputHandler},
+    manager::{
+        ClashSettings, ComboSettings, DefaultClashSettings, DefaultComboSettings,
+        DisableInputManager, InputHandler,
+    },
     plugins::InputKey,
     pressed_to_value,
 };
@@ -76,11 +79,13 @@ pub fn system_gather_button_inputs<K, T>(
             &mut InputBindings<K, T>,
             Option<&mut InputHandler>,
             Option<&ClashSettings>,
+            Option<&ComboSettings>,
         ),
         Without<DisableInputManager<K, T>>,
     >,
     gamepad_query: Query<&Gamepad>,
     default_clash_settings: Option<Res<DefaultClashSettings>>,
+    default_combo_settings: Option<Res<DefaultComboSettings>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
@@ -89,8 +94,16 @@ pub fn system_gather_button_inputs<K, T>(
     K: InputKey + Send + Sync + 'static,
     T: BindEvent + 'static,
 {
+    let default_combo_settings: ComboSettings = if let Some(d) = default_combo_settings {
+        **d
+    } else {
+        ComboSettings::default()
+    };
     let players = bindings.count();
-    for (entity, mut bindings, mut input_handler, new_settings) in bindings.iter_mut() {
+    for (entity, mut bindings, mut input_handler, new_clash_settings, combo_settings) in
+        bindings.iter_mut()
+    {
+        let combo_settings = combo_settings.unwrap_or_else(|| &default_combo_settings);
         let Some(input_handler) = &mut input_handler else {
             if let Ok(mut e_cmds) = commands.get_entity(entity) {
                 let handler = if let Some(asdf) = &default_clash_settings {
@@ -117,7 +130,7 @@ pub fn system_gather_button_inputs<K, T>(
             Vec::new()
         };
 
-        if let Some(new) = new_settings {
+        if let Some(new) = new_clash_settings {
             if let Ok(mut e_cmds) = commands.get_entity(entity) {
                 e_cmds.try_remove::<ClashSettings>();
             }
@@ -159,22 +172,22 @@ pub fn system_gather_button_inputs<K, T>(
                                 .poll(&button_chord.input_kinds())
                                 .map(|v| button_chord.apply(v)),
                             ButtonBinding::Combo(button_combo) => {
-                                let add_combo_breaking = 0;
                                 // Either differ to re-poll or check if the next expected button is pressed.
                                 let expected = button_combo.expected_binding_mut();
-                                let out = input_handler.poll(&[expected.kind()]);
-                                if let Some(o) = out {
-                                    if expected.apply(o) {
-                                        Some(
-                                            expected_is_pressed(button_combo, input_handler)
-                                                .is_pressed(),
-                                        )
-                                    } else {
-                                        Some(false)
-                                    }
-                                } else {
-                                    None
-                                }
+                                let _out = input_handler.poll(&[expected.kind()]);
+                                // if let Some(o) = out {
+                                //     if expected.apply(o) {
+                                //         Some(
+                                //             expected_is_pressed(button_combo, input_handler)
+                                //                 .is_pressed(),
+                                //         )
+                                //     } else {
+                                //         Some(false)
+                                //     }
+                                // } else {
+                                //     None
+                                // }
+                                None
                             }
                             ButtonBinding::Single(bevy_input_kind) => input_handler
                                 .poll(&[bevy_input_kind.kind()])
@@ -283,9 +296,28 @@ pub fn system_gather_button_inputs<K, T>(
                                     button_chord.apply(out)
                                 }
                                 ButtonBinding::Combo(button_combo) => {
-                                    let b = button_combo.expected_binding_mut();
-                                    let out = input_handler.repoll(&[b.kind()]);
-                                    if b.apply(out) {
+                                    let b = button_combo.expected_binding();
+                                    let mut check = Vec::with_capacity(3);
+                                    check.push(b.kind());
+                                    let out = input_handler.repoll(&check);
+                                    if let Some(prev) = button_combo.previous_binding() {
+                                        check.push(prev.kind());
+                                    }
+                                    if let Some(next) = button_combo.next_binding() {
+                                        check.push(next.kind());
+                                    }
+                                    if match combo_settings {
+                                        ComboSettings::NoBreak => false,
+                                        ComboSettings::ButtonsBreak => {
+                                            input_handler.poll_interupt(&check, false)
+                                        }
+                                        ComboSettings::AnythingBreaks => {
+                                            input_handler.poll_interupt(&check, true)
+                                        }
+                                    } {
+                                        button_combo.interupt();
+                                        false
+                                    } else if b.apply(out) {
                                         expected_is_pressed(button_combo, input_handler)
                                             .is_pressed()
                                     } else {

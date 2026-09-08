@@ -336,6 +336,10 @@ impl ButtonCombo {
         };
         out
     }
+    /// Tells the combo that the combo was interupted and should start over.
+    pub fn interupt(&mut self) {
+        self.current_index = 0;
+    }
 }
 
 /// An individual binding for a button like.

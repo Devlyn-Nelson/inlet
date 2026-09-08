@@ -183,10 +183,30 @@ impl ClashSettings {
     }
 }
 
+/// A Resource that defines default combo settings for entities that don't specify.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct DefaultComboSettings(pub ComboSettings);
+
+impl Deref for DefaultComboSettings {
+    type Target = ComboSettings;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for DefaultComboSettings {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug, Component, Clone, Copy, Default)]
 pub enum ComboSettings {
     /// Combos don't get cancelled by incorrect inputs.
     NoBreak,
     /// Combos will cancel if a button that isn't the expected button is pressed.
+    #[default]
     ButtonsBreak,
     /// Any incorrect input (buttons or axis) will cancel a combo.
     AnythingBreaks,
@@ -204,7 +224,6 @@ pub struct InputHandler {
     /// reset the coord length on tick so that smaller coords can become active
     /// after releasing a larger coord.
     coord_regretion: bool,
-    buttons_pressed_this_frame: usize,
 }
 
 impl From<ClashSettings> for InputHandler {
@@ -214,7 +233,6 @@ impl From<ClashSettings> for InputHandler {
             clashables: HashMap::default(),
             settings: value,
             coord_regretion: false,
-            buttons_pressed_this_frame: 0,
         }
     }
 }
@@ -326,7 +344,6 @@ impl InputHandler {
             }
         }
         self.frame += 1;
-        self.buttons_pressed_this_frame = 0;
     }
     /// Updates the internal binding map and resets all states.
     pub fn update_list<K, T>(&mut self, map: &HashMap<K, InputBinding<T>>) {
@@ -351,6 +368,24 @@ impl InputHandler {
                 }
             }
         }
+    }
+    /// Used to determine if a combo is broken. Returns `true` if a input that is not in `clashables` is updated this
+    /// frame.
+    pub(crate) fn poll_interupt(
+        &mut self,
+        clashable: &[BevyInputKind],
+        axis_interupts: bool,
+    ) -> bool {
+        for (binding, state) in self.clashables.iter() {
+            if !clashable.contains(binding) {
+                if state.frame == self.frame {
+                    if axis_interupts || state.value.is_button() {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
     /// Tries to return the newest value associated with the binding.
     ///

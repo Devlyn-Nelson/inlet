@@ -152,12 +152,10 @@ impl Default for InputValue {
 }
 
 impl InputValue {
-    /// Returns `true` when the value is `InputValue::Pressed(true)`.
-    fn is_true_press(&self) -> bool {
-        match self {
-            InputValue::Pressed(pressed) => *pressed,
-            InputValue::Value(_) => false,
-        }
+    /// Returns `true` if the value is a `Self::Pressed(_)`
+    /// or `false` if `Self::Value(_)`.
+    pub fn is_button(&self) -> bool {
+        matches!(self, Self::Pressed(_))
     }
     /// Returns true if `self` is:
     /// - `Self::Button(true)`.
