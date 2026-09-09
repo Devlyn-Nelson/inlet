@@ -522,9 +522,6 @@ where
             changed: true,
         }
     }
-    pub(crate) fn change(&mut self) {
-        self.changed = true;
-    }
     /// Returns `true` when binding detects changes to inner map. The input system should also set changed
     /// when a new [`ClashSettings`](crate::manager::ClashSettings) is applied.
     pub(crate) fn changed(&mut self) -> bool {

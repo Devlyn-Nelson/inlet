@@ -178,23 +178,12 @@ impl ButtonChord {
     }
 }
 
-/// Rules for how to determine if a [`ButtonCombo`] can progress.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum ButtonComboRules {
-    None,
-    PreviousMustBeReleased,
-    #[default]
-    NextMustBeReleased,
-}
-
 /// A set of buttons that must all be pressed one after another to become active.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ButtonCombo {
     actions: Vec<ButtonBindingKind>,
     current_index: usize,
     last_hit: Instant,
-    tolerance: Duration,
-    rules: ButtonComboRules,
 }
 
 impl ButtonCombo {
@@ -205,15 +194,8 @@ impl ButtonCombo {
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         self.actions.iter().map(|a| a.kind()).collect()
     }
-    pub fn rules(&self) -> ButtonComboRules {
-        self.rules
-    }
     /// Creates a new button combo bindings.
-    pub fn new_with_tolerance(
-        bindings: Vec<ButtonBindingKind>,
-        rules: ButtonComboRules,
-        tolerance: Duration,
-    ) -> Self {
+    pub fn new(bindings: Vec<ButtonBindingKind>) -> Self {
         if bindings.len() <= 1 {
             bevy::log::warn!("inlet detected a button combo that is less than 2 buttons long.")
         }
@@ -221,50 +203,15 @@ impl ButtonCombo {
             actions: bindings,
             current_index: 0,
             last_hit: Instant::now(),
-            tolerance,
-            rules,
         }
-    }
-    /// Creates a new button combo bindings with default [`ButtonComboRules`].
-    pub fn new_with_tolerance_default_rules(
-        bindings: Vec<ButtonBindingKind>,
-        tolerance: Duration,
-    ) -> Self {
-        Self::new_with_tolerance(bindings, ButtonComboRules::default(), tolerance)
-    }
-    /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new(bindings: Vec<ButtonBindingKind>, rules: ButtonComboRules) -> Self {
-        Self::new_with_tolerance(bindings, rules, Duration::from_millis(250))
-    }
-    /// Creates a new button combo bindings with a tolerance of 250 milliseconds (quarter second).
-    pub fn new_default_rules(bindings: Vec<ButtonBindingKind>) -> Self {
-        Self::new_with_tolerance(
-            bindings,
-            ButtonComboRules::default(),
-            Duration::from_millis(250),
-        )
-    }
-    /// Returns the amount of time allowed to pass before the combo gets reset.
-    pub fn tolerance(&self) -> Duration {
-        self.tolerance
-    }
-    /// Sets the amount of time allowed to pass before the combo gets reset.
-    pub fn with_tolerance(mut self, tolerance: Duration) -> Self {
-        self.tolerance = tolerance;
-        self
-    }
-    /// Sets the rules.
-    pub fn with_rules(mut self, rules: ButtonComboRules) -> Self {
-        self.rules = rules;
-        self
     }
     /// Grabs the expected button binding that would need to happen in order for the combo to be progressed.
     ///
     /// # Warning
     ///
     /// If the timer between expected presses ran out, it will return the first binding.
-    pub fn expected_binding(&self) -> &ButtonBindingKind {
-        let i = if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
+    pub fn expected_binding(&self, tolerance: &Duration) -> &ButtonBindingKind {
+        let i = if self.current_index != 0 && &self.last_hit.elapsed() > tolerance {
             0
         } else {
             self.current_index
@@ -298,8 +245,8 @@ impl ButtonCombo {
     ///
     /// If the duration between the last time `self.hit()` and the call of this function is greater than `self.tolerance`
     /// the combo will reset to the beginning of the combo.
-    pub fn expected_binding_mut(&mut self) -> &mut ButtonBindingKind {
-        if self.current_index != 0 && self.last_hit.elapsed() > self.tolerance {
+    pub fn expected_binding_mut(&mut self, tolerance: &Duration) -> &mut ButtonBindingKind {
+        if self.current_index != 0 && &self.last_hit.elapsed() > tolerance {
             self.current_index = 0;
         }
         &mut self.actions[self.current_index]

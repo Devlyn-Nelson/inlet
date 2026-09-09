@@ -201,8 +201,66 @@ impl DerefMut for DefaultComboSettings {
     }
 }
 
-#[derive(Debug, Component, Clone, Copy, Default)]
-pub enum ComboSettings {
+#[derive(Debug, Component, Clone, Copy)]
+pub struct ComboSettings {
+    interupt: ComboInterputSettings,
+    tolerence: Duration,
+    progression: ComboProgressionSettings,
+}
+
+impl ComboSettings {
+    pub fn interupt_settings(&self) -> &ComboInterputSettings {
+        &self.interupt
+    }
+
+    pub fn with_interupt_settings(mut self, settings: ComboInterputSettings) -> Self {
+        self.interupt = settings;
+        self
+    }
+
+    pub fn set_interupt_settings(&mut self, settings: ComboInterputSettings) {
+        self.interupt = settings;
+    }
+
+    pub fn tolerence(&self) -> &Duration {
+        &self.tolerence
+    }
+
+    pub fn with_tolerence(mut self, settings: Duration) -> Self {
+        self.tolerence = settings;
+        self
+    }
+
+    pub fn set_tolerence(&mut self, settings: Duration) {
+        self.tolerence = settings;
+    }
+
+    pub fn progression_settings(&self) -> &ComboProgressionSettings {
+        &self.progression
+    }
+
+    pub fn with_progression_settings(mut self, settings: ComboProgressionSettings) -> Self {
+        self.progression = settings;
+        self
+    }
+
+    pub fn set_progression_settings(&mut self, settings: ComboProgressionSettings) {
+        self.progression = settings;
+    }
+}
+
+impl Default for ComboSettings {
+    fn default() -> Self {
+        Self {
+            interupt: ComboInterputSettings::default(),
+            tolerence: Duration::from_millis(250),
+            progression: ComboProgressionSettings::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum ComboInterputSettings {
     /// Combos don't get cancelled by incorrect inputs.
     NoBreak,
     /// Combos will cancel if a button that isn't the expected button is pressed.
@@ -212,6 +270,15 @@ pub enum ComboSettings {
     AnythingBreaks,
 }
 
+/// Rules for how to determine if a [`ButtonCombo`] can progress.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ComboProgressionSettings {
+    None,
+    PreviousMustBeReleased,
+    #[default]
+    NextMustBeReleased,
+}
+
 /// Management of a players bindings and the states.
 #[derive(Component)]
 pub struct InputHandler {
@@ -219,27 +286,18 @@ pub struct InputHandler {
     frame: usize,
     /// All known bindings and the state of the input.
     clashables: HashMap<BevyInputKind, InputState>,
-    /// The settings used for the resolution of clashing bindings.
-    settings: ClashSettings,
     /// reset the coord length on tick so that smaller coords can become active
     /// after releasing a larger coord.
     coord_regretion: bool,
 }
 
-impl From<ClashSettings> for InputHandler {
-    fn from(value: ClashSettings) -> Self {
+impl Default for InputHandler {
+    fn default() -> Self {
         Self {
             frame: 0,
             clashables: HashMap::default(),
-            settings: value,
             coord_regretion: false,
         }
-    }
-}
-
-impl Default for InputHandler {
-    fn default() -> Self {
-        Self::from(ClashSettings::default())
     }
 }
 
@@ -255,15 +313,6 @@ enum Outy {
 }
 
 impl InputHandler {
-    /// The settings used for clash handling.
-    pub fn settings(&self) -> &ClashSettings {
-        &self.settings
-    }
-    /// Please update_list after using this, because some input may be in a state that will not
-    /// allow the input to enter a state that is correct for the new settings.
-    pub fn set_settings(&mut self, new: ClashSettings) {
-        self.settings = new;
-    }
     /// Whether to reset the coord length on tick so that smaller coords can become
     /// active after releasing a larger coord.
     pub fn coord_regretion(&self) -> bool {
@@ -282,7 +331,7 @@ impl InputHandler {
     /// - else if the input state is clashing : change to active.
     /// - increases the internal counter for "frames" after all above steps.
     ///
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self, clash_settings: &ClashSettings) {
         let cr = self.coord_regretion();
         for (_c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
@@ -295,7 +344,7 @@ impl InputHandler {
                     Some(InputStateKind::inactive())
                 }
             } else if let ClashSettings::BufferClashing(duration)
-            | ClashSettings::BufferAll(duration) = &self.settings
+            | ClashSettings::BufferAll(duration) = clash_settings
                 && let InputStateKind::Buffered {
                     start,
                     coord_len,
@@ -390,7 +439,11 @@ impl InputHandler {
     /// Tries to return the newest value associated with the binding.
     ///
     /// If `None` is returned then you must [`Self::repoll`] after all inputs have been polled
-    pub(crate) fn poll(&mut self, clashable: &[BevyInputKind]) -> Option<InputValue> {
+    pub(crate) fn poll(
+        &mut self,
+        clashable: &[BevyInputKind],
+        clash_settings: &ClashSettings,
+    ) -> Option<InputValue> {
         if clashable.is_empty() {
             return Some(InputValue::default());
         }
@@ -434,13 +487,13 @@ impl InputHandler {
             let new_state = if pressed {
                 match &mut state.kind {
                     InputStateKind::NoClash => {
-                        if self.settings.buffer_all() {
+                        if clash_settings.buffer_all() {
                             Some(InputStateKind::buffered(chord_length))
                         } else {
                             None
                         }
                     }
-                    InputStateKind::Inactive => match self.settings {
+                    InputStateKind::Inactive => match clash_settings {
                         ClashSettings::Unbuffered => Some(InputStateKind::clashing(chord_length)),
                         ClashSettings::BufferAll(_) | ClashSettings::BufferClashing(_) => {
                             Some(InputStateKind::buffered(chord_length))

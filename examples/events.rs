@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use bevy::prelude::*;
 use inlet::{
     InputBindings, InputManagementPlugin,
@@ -99,16 +97,15 @@ fn setup(
                 (
                     vec![
                         // W -> S -> D -> A
-                        ButtonCombo::new_default_rules(vec![
+                        ButtonCombo::new(vec![
                             KeyCode::KeyW.into(),
                             KeyCode::KeyS.into(),
                             KeyCode::KeyD.into(),
                             KeyCode::KeyA.into(),
                         ])
-                        .with_tolerance(Duration::from_secs(3))
                         .into(),
                         // Up -> Down -> Right -> Left on dpad
-                        ButtonCombo::new_default_rules(vec![
+                        ButtonCombo::new(vec![
                             GamepadButton::DPadUp.into(),
                             GamepadButton::DPadDown.into(),
                             GamepadButton::DPadRight.into(),
