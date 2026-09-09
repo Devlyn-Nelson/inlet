@@ -1,6 +1,7 @@
 //! [`InputHandler`] related types.
 use std::{
     fmt::Display,
+    marker::PhantomData,
     ops::{Deref, DerefMut},
     time::{Duration, Instant},
 };
@@ -32,13 +33,13 @@ enum InputStateKind {
     /// the same `usize` for at least 1 frame.
     Buffered {
         start: Instant,
-        coord_len: usize,
-        last_coord_len: usize,
+        chord_len: usize,
+        last_chord_len: usize,
     },
     /// State is currently active if you meet the priority stored.
     Active {
-        coord_len: usize,
-        last_coord_len: usize,
+        chord_len: usize,
+        last_chord_len: usize,
     },
 }
 
@@ -52,21 +53,14 @@ impl InputStateKind {
     fn buffered(len: usize) -> Self {
         Self::Buffered {
             start: Instant::now(),
-            coord_len: len,
-            last_coord_len: len,
+            chord_len: len,
+            last_chord_len: len,
         }
     }
-    // fn buffered_with_instant(len: usize, i: Instant) -> Self {
-    //     Self::Buffered {
-    //         start: i,
-    //         coord_len: len,
-    //         last_coord_len: len,
-    //     }
-    // }
     fn active(len: usize) -> Self {
         Self::Active {
-            coord_len: len,
-            last_coord_len: len,
+            chord_len: len,
+            last_chord_len: len,
         }
     }
     fn replace(&mut self, new: Self) {
@@ -80,8 +74,8 @@ impl Display for InputStateKind {
             InputStateKind::NoClash => write!(f, "NoClash"),
             InputStateKind::Inactive => write!(f, "Inactive"),
             InputStateKind::Clashing(len) => write!(f, "Clashing({len})"),
-            InputStateKind::Buffered { coord_len, .. } => write!(f, "Buffered({coord_len})"),
-            InputStateKind::Active { coord_len, .. } => write!(f, "Active({coord_len})"),
+            InputStateKind::Buffered { chord_len, .. } => write!(f, "Buffered({chord_len})"),
+            InputStateKind::Active { chord_len, .. } => write!(f, "Active({chord_len})"),
         }
     }
 }
@@ -96,6 +90,7 @@ struct InputState {
     value: InputValue,
 }
 
+/// A Resource that defines default clash settings for newly created [`InputManagers`].
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct DefaultClashSettings(pub ClashSettings);
 
@@ -163,6 +158,8 @@ pub enum ClashSettings {
     ///   binding can see it again.
     /// - If a chord has multiple buffered inputs, all inputs start times will be set the the oldest.
     BufferAll(Option<Duration>),
+    /// Disables Clash Detection. All presses will become active immediatly.
+    Disabled,
 }
 
 impl ClashSettings {
@@ -181,6 +178,102 @@ impl ClashSettings {
     }
 }
 
+/// A Resource that defines default combo settings for entities that don't specify.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct DefaultComboSettings(pub ComboSettings);
+
+impl Deref for DefaultComboSettings {
+    type Target = ComboSettings;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for DefaultComboSettings {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Debug, Component, Clone, Copy)]
+pub struct ComboSettings {
+    interupt: ComboInterputSettings,
+    tolerence: Duration,
+    progression: ComboProgressionSettings,
+}
+
+impl ComboSettings {
+    pub fn interupt_settings(&self) -> &ComboInterputSettings {
+        &self.interupt
+    }
+
+    pub fn with_interupt_settings(mut self, settings: ComboInterputSettings) -> Self {
+        self.interupt = settings;
+        self
+    }
+
+    pub fn set_interupt_settings(&mut self, settings: ComboInterputSettings) {
+        self.interupt = settings;
+    }
+
+    pub fn tolerence(&self) -> &Duration {
+        &self.tolerence
+    }
+
+    pub fn with_tolerence(mut self, settings: Duration) -> Self {
+        self.tolerence = settings;
+        self
+    }
+
+    pub fn set_tolerence(&mut self, settings: Duration) {
+        self.tolerence = settings;
+    }
+
+    pub fn progression_settings(&self) -> &ComboProgressionSettings {
+        &self.progression
+    }
+
+    pub fn with_progression_settings(mut self, settings: ComboProgressionSettings) -> Self {
+        self.progression = settings;
+        self
+    }
+
+    pub fn set_progression_settings(&mut self, settings: ComboProgressionSettings) {
+        self.progression = settings;
+    }
+}
+
+impl Default for ComboSettings {
+    fn default() -> Self {
+        Self {
+            interupt: ComboInterputSettings::default(),
+            tolerence: Duration::from_millis(250),
+            progression: ComboProgressionSettings::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum ComboInterputSettings {
+    /// Combos don't get cancelled by incorrect inputs.
+    NoBreak,
+    /// Combos will cancel if a button that isn't the expected button is pressed.
+    #[default]
+    ButtonsBreak,
+    /// Any incorrect input (buttons or axis) will cancel a combo.
+    AnythingBreaks,
+}
+
+/// Rules for how to determine if a [`ButtonCombo`] can progress.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ComboProgressionSettings {
+    None,
+    PreviousMustBeReleased,
+    #[default]
+    NextMustBeReleased,
+}
+
 /// Management of a players bindings and the states.
 #[derive(Component)]
 pub struct InputHandler {
@@ -188,29 +281,24 @@ pub struct InputHandler {
     frame: usize,
     /// All known bindings and the state of the input.
     clashables: HashMap<BevyInputKind, InputState>,
-    /// The settings used for the resolution of clashing bindings.
-    settings: ClashSettings,
-    /// reset the coord length on tick so that smaller coords can become active
-    /// after releasing a larger coord.
-    coord_regretion: bool,
-}
-
-impl From<ClashSettings> for InputHandler {
-    fn from(value: ClashSettings) -> Self {
-        Self {
-            frame: 0,
-            clashables: HashMap::default(),
-            settings: value,
-            coord_regretion: false,
-        }
-    }
+    /// reset the chord length on tick so that smaller chords can become active
+    /// after releasing a larger chord.
+    chord_regretion: bool,
 }
 
 impl Default for InputHandler {
     fn default() -> Self {
-        Self::from(ClashSettings::default())
+        Self {
+            frame: 0,
+            clashables: HashMap::default(),
+            chord_regretion: false,
+        }
     }
 }
+
+/// Disables a InputManger with types `T` and `K`.
+#[derive(Debug, Default, Component)]
+pub struct DisableInputManager<K, T>(PhantomData<T>, PhantomData<K>);
 
 #[derive(PartialEq, Eq)]
 enum Outy {
@@ -220,24 +308,15 @@ enum Outy {
 }
 
 impl InputHandler {
-    /// The settings used for clash handling.
-    pub fn settings(&self) -> &ClashSettings {
-        &self.settings
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn chord_regretion(&self) -> bool {
+        self.chord_regretion
     }
-    /// Please update_list after using this, because some input may be in a state that will not
-    /// allow the input to enter a state that is correct for the new settings.
-    pub fn set_settings(&mut self, new: ClashSettings) {
-        self.settings = new;
-    }
-    /// Whether to reset the coord length on tick so that smaller coords can become
-    /// active after releasing a larger coord.
-    pub fn coord_regretion(&self) -> bool {
-        self.coord_regretion
-    }
-    /// Whether to reset the coord length on tick so that smaller coords can become
-    /// active after releasing a larger coord.
-    pub fn set_coord_regretion(&mut self, coord_regretion: bool) {
-        self.coord_regretion = coord_regretion;
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn set_chord_regretion(&mut self, chord_regretion: bool) {
+        self.chord_regretion = chord_regretion;
     }
     /// Does some internal cleaning that is only possible between bindings checking for their inputs
     /// because we can assume that all (or none) of the inputs have been given a change to fight for priority.
@@ -247,8 +326,8 @@ impl InputHandler {
     /// - else if the input state is clashing : change to active.
     /// - increases the internal counter for "frames" after all above steps.
     ///
-    pub fn tick(&mut self) {
-        let cr = self.coord_regretion();
+    pub fn tick(&mut self, clash_settings: &ClashSettings) {
+        let cr = self.chord_regretion();
         for (_c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
                 if matches!(
@@ -260,26 +339,26 @@ impl InputHandler {
                     Some(InputStateKind::inactive())
                 }
             } else if let ClashSettings::BufferClashing(duration)
-            | ClashSettings::BufferAll(duration) = &self.settings
+            | ClashSettings::BufferAll(duration) = clash_settings
                 && let InputStateKind::Buffered {
                     start,
-                    coord_len,
-                    last_coord_len,
+                    chord_len,
+                    last_chord_len,
                 } = &state.kind
             {
                 if let Some(d) = duration {
                     if start.elapsed() >= *d {
                         Some(InputStateKind::Active {
-                            coord_len: *coord_len,
-                            last_coord_len: *last_coord_len,
+                            chord_len: *chord_len,
+                            last_chord_len: *last_chord_len,
                         })
                     } else {
                         None
                     }
                 } else {
                     Some(InputStateKind::Active {
-                        coord_len: *coord_len,
-                        last_coord_len: *last_coord_len,
+                        chord_len: *chord_len,
+                        last_chord_len: *last_chord_len,
                     })
                 }
             } else if let InputStateKind::Clashing(priority) = &state.kind {
@@ -289,17 +368,17 @@ impl InputHandler {
             };
             match &mut state.kind {
                 InputStateKind::Buffered {
-                    coord_len,
-                    last_coord_len,
+                    chord_len,
+                    last_chord_len,
                     ..
                 }
                 | InputStateKind::Active {
-                    coord_len,
-                    last_coord_len,
+                    chord_len,
+                    last_chord_len,
                 } => {
-                    *last_coord_len = *coord_len;
+                    *last_chord_len = *chord_len;
                     if cr {
-                        *coord_len = 0;
+                        *chord_len = 0;
                     }
                 }
                 _ => {}
@@ -334,10 +413,32 @@ impl InputHandler {
             }
         }
     }
+    /// Used to determine if a combo is broken. Returns `true` if a input that is not in `clashables` is updated this
+    /// frame.
+    pub(crate) fn poll_interupt(
+        &mut self,
+        clashable: &[BevyInputKind],
+        axis_interupts: bool,
+    ) -> bool {
+        for (binding, state) in self.clashables.iter() {
+            if !clashable.contains(binding) {
+                if state.frame == self.frame {
+                    if axis_interupts || state.value.is_button() {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
     /// Tries to return the newest value associated with the binding.
     ///
     /// If `None` is returned then you must [`Self::repoll`] after all inputs have been polled
-    pub(crate) fn poll(&mut self, clashable: &[BevyInputKind]) -> Option<InputValue> {
+    pub(crate) fn poll(
+        &mut self,
+        clashable: &[BevyInputKind],
+        clash_settings: &ClashSettings,
+    ) -> Option<InputValue> {
         if clashable.is_empty() {
             return Some(InputValue::default());
         }
@@ -363,6 +464,7 @@ impl InputHandler {
                     }
                 }
                 Entry::Vacant(v) => {
+                    #[cfg(feature = "inlet_log")]
                     bevy::log::warn!("polled unregistered bevy input in manager. ({c:?})");
                     v.insert(InputState {
                         frame: self.frame,
@@ -381,17 +483,18 @@ impl InputHandler {
             let new_state = if pressed {
                 match &mut state.kind {
                     InputStateKind::NoClash => {
-                        if self.settings.buffer_all() {
+                        if clash_settings.buffer_all() {
                             Some(InputStateKind::buffered(chord_length))
                         } else {
                             None
                         }
                     }
-                    InputStateKind::Inactive => match self.settings {
+                    InputStateKind::Inactive => match clash_settings {
                         ClashSettings::Unbuffered => Some(InputStateKind::clashing(chord_length)),
                         ClashSettings::BufferAll(_) | ClashSettings::BufferClashing(_) => {
                             Some(InputStateKind::buffered(chord_length))
                         }
+                        ClashSettings::Disabled => Some(InputStateKind::active(chord_length)),
                     },
                     InputStateKind::Clashing(len) => {
                         if chord_length > *len {
@@ -402,32 +505,32 @@ impl InputHandler {
                     }
                     InputStateKind::Buffered {
                         start,
-                        coord_len,
-                        last_coord_len,
+                        chord_len,
+                        last_chord_len,
                     } => {
                         if let Some(oldest) = oldest_press
                             && oldest < *start
                         {
                             *start = oldest;
                         }
-                        if chord_length > *coord_len {
+                        if chord_length > *chord_len {
                             Some(InputStateKind::Buffered {
                                 start: *start,
-                                coord_len: chord_length,
-                                last_coord_len: *last_coord_len,
+                                chord_len: chord_length,
+                                last_chord_len: *last_chord_len,
                             })
                         } else {
                             None
                         }
                     }
                     InputStateKind::Active {
-                        coord_len,
-                        last_coord_len,
+                        chord_len,
+                        last_chord_len,
                     } => {
-                        if chord_length > *coord_len {
+                        if chord_length > *chord_len {
                             Some(InputStateKind::Active {
-                                coord_len: chord_length,
-                                last_coord_len: *last_coord_len,
+                                chord_len: chord_length,
+                                last_chord_len: *last_chord_len,
                             })
                         } else {
                             None
@@ -455,11 +558,10 @@ impl InputHandler {
                     }
                 }
                 InputStateKind::Active {
-                    last_coord_len: coord_len,
+                    last_chord_len: chord_len,
                     ..
                 } => {
-                    bevy::log::info!("{c:?} = {coord_len}");
-                    if *coord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
+                    if *chord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
                         repoll = Outy::Hide;
                     }
                 }
@@ -495,9 +597,9 @@ impl InputHandler {
                         return InputValue::default();
                     }
                     InputStateKind::NoClash => {}
-                    InputStateKind::Clashing(coord_len)
-                    | InputStateKind::Active { coord_len, .. } => {
-                        if clashable.len() != *coord_len {
+                    InputStateKind::Clashing(chord_len)
+                    | InputStateKind::Active { chord_len, .. } => {
+                        if clashable.len() != *chord_len {
                             return InputValue::default();
                         }
                     }

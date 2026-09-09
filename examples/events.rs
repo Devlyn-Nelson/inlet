@@ -97,7 +97,7 @@ fn setup(
                 (
                     vec![
                         // W -> S -> D -> A
-                        ButtonCombo::new_default_rules(vec![
+                        ButtonCombo::new(vec![
                             KeyCode::KeyW.into(),
                             KeyCode::KeyS.into(),
                             KeyCode::KeyD.into(),
@@ -105,7 +105,7 @@ fn setup(
                         ])
                         .into(),
                         // Up -> Down -> Right -> Left on dpad
-                        ButtonCombo::new_default_rules(vec![
+                        ButtonCombo::new(vec![
                             GamepadButton::DPadUp.into(),
                             GamepadButton::DPadDown.into(),
                             GamepadButton::DPadRight.into(),

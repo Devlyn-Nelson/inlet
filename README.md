@@ -218,13 +218,36 @@ Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system 
 
 ## Clash Settings
 
-If you like `Chord`s and have opinions about how inputs that clash should behave: you can configure how that happens.
+The behavior of clash detection can be configured on a per player bias (`ClashSettings`) or globally (`DefaultClashSettings`).
 
-### Resource
-
-You can spawn  a `ClashSettings` resource (preferably on start up) that all new `InputHandler` will use. The system that updates bindings will automatically insert `InputHandler` on entities that have a `InputBindings` attached to them, acting as a default.
+The options are:
+- Unbuffered: Inputs that can clash will be rechecked after all inputs are checked at least once.
+- BufferClashing: Inputs that can clash will not be reported for the inital frame they become active. Next frame or after provided `Duration` the action with the largest chord that is active will be given the inputs. Note that buttons that can NOT clash with other do NOT get buffered.
+- BufferAll: This will cause ALL inputs to buffer. This exists to make things more consistant.
 
 ### Component
 
-When you insert `ClashSettings` as a component on an entity that also has an attached `InputBindings` the settings will update and all current input states will reset. This means you can allow player to configure this on a per-player basis.
+If the `ClashSettings` component is present on an entity that has a `InputBindings` the attached settings will ube used.
 
+### Resource
+
+If an entity does not have a `ClashSettings` component attached the `DefaultClashSettings` resource will be used, otherwise `ClashSettings::default` will be used.
+
+## Combo Settings
+
+The behavior of combos can be configured on a per player bias (`ComboSettings`) or globally (`DefaultComboSettings`).
+
+Logic of interupting combos:
+- Don't interupt on incorrect button press.
+- Interupt if an incorrect button was pressed.
+- Interupt if any input change happened.
+
+Maximum duration between combo button presses can also be configured
+
+### Component
+
+If the `ComboSettings` component is present on an entity that has a `InputBindings` the attached settings will ube used.
+
+### Resource
+
+If an entity does not have a `ComboSettings` component attached the `DefaultComboSettings` resource will be used, otherwise `ComboSettings::default` will be used.

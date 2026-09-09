@@ -1,5 +1,5 @@
 use bevy::{
-    ecs::{entity::Entity, system::Commands, world::Mut},
+    ecs::{entity::Entity, query::Without, system::Commands, world::Mut},
     input::{
         ButtonInput,
         gamepad::Gamepad,
@@ -13,7 +13,10 @@ use crate::{
     BindEvent, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    manager::{ClashSettings, DefaultClashSettings, InputHandler},
+    manager::{
+        ClashSettings, ComboInterputSettings, ComboSettings, DefaultClashSettings,
+        DefaultComboSettings, DisableInputManager, InputHandler,
+    },
     plugins::InputKey,
     pressed_to_value,
 };
@@ -25,16 +28,18 @@ use crate::{
 fn expected_is_pressed(
     button_combo: &mut ButtonCombo,
     input_handler: &mut Mut<InputHandler>,
+    clash_settings: &ClashSettings,
+    combo_settings: &ComboSettings,
 ) -> InputValue {
-    match button_combo.rules() {
-        crate::button::ButtonComboRules::None => button_combo.hit().into(),
-        crate::button::ButtonComboRules::PreviousMustBeReleased => {
+    match combo_settings.progression_settings() {
+        crate::manager::ComboProgressionSettings::None => button_combo.hit().into(),
+        crate::manager::ComboProgressionSettings::PreviousMustBeReleased => {
             let prev = button_combo.previous_binding();
             // If a previous button exist check that it is released.
             if let Some(p) = prev {
                 // Either differ to re-poll or if previous is not pressed hit the combo.
                 let b = vec![p.kind()];
-                if let Some(pre_asdf) = input_handler.poll(&b)
+                if let Some(pre_asdf) = input_handler.poll(&b, clash_settings)
                     && !p.apply(pre_asdf)
                 {
                     button_combo.hit().into()
@@ -46,13 +51,13 @@ fn expected_is_pressed(
                 button_combo.hit().into()
             }
         }
-        crate::button::ButtonComboRules::NextMustBeReleased => {
+        crate::manager::ComboProgressionSettings::NextMustBeReleased => {
             let next = button_combo.next_binding();
             // If a next button exist check that it is released.
             if let Some(p) = next {
                 // Either differ to re-poll or if next is not pressed hit the combo.
                 let b = vec![p.kind()];
-                if let Some(pre_asdf) = input_handler.poll(&b)
+                if let Some(pre_asdf) = input_handler.poll(&b, clash_settings)
                     && !p.apply(pre_asdf)
                 {
                     button_combo.hit().into()
@@ -70,14 +75,19 @@ fn expected_is_pressed(
 pub fn system_gather_button_inputs<K, T>(
     mut commands: Commands,
     mut writer: MessageWriter<T>,
-    mut bindings: Query<(
-        Entity,
-        &mut InputBindings<K, T>,
-        Option<&mut InputHandler>,
-        Option<&ClashSettings>,
-    )>,
+    mut bindings: Query<
+        (
+            Entity,
+            &mut InputBindings<K, T>,
+            Option<&mut InputHandler>,
+            Option<&ClashSettings>,
+            Option<&ComboSettings>,
+        ),
+        Without<DisableInputManager<K, T>>,
+    >,
     gamepad_query: Query<&Gamepad>,
     default_clash_settings: Option<Res<DefaultClashSettings>>,
+    default_combo_settings: Option<Res<DefaultComboSettings>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
@@ -86,16 +96,25 @@ pub fn system_gather_button_inputs<K, T>(
     K: InputKey + Send + Sync + 'static,
     T: BindEvent + 'static,
 {
+    let default_combo_settings: ComboSettings = if let Some(d) = default_combo_settings {
+        **d
+    } else {
+        ComboSettings::default()
+    };
+    let default_clash_settings: ClashSettings = if let Some(d) = default_clash_settings {
+        **d
+    } else {
+        ClashSettings::default()
+    };
     let players = bindings.count();
-    for (entity, mut bindings, mut input_handler, new_settings) in bindings.iter_mut() {
+    for (entity, mut bindings, mut input_handler, clash_settings, combo_settings) in
+        bindings.iter_mut()
+    {
+        let combo_settings = combo_settings.unwrap_or_else(|| &default_combo_settings);
+        let clash_settings = clash_settings.unwrap_or_else(|| &default_clash_settings);
         let Some(input_handler) = &mut input_handler else {
             if let Ok(mut e_cmds) = commands.get_entity(entity) {
-                let handler = if let Some(asdf) = &default_clash_settings {
-                    (***asdf).into()
-                } else {
-                    InputHandler::default()
-                };
-                e_cmds.try_insert(handler);
+                e_cmds.try_insert(InputHandler::default());
             }
             continue;
         };
@@ -105,6 +124,7 @@ pub fn system_gather_button_inputs<K, T>(
             match gamepad_query.get(*gamepad) {
                 Ok(inputs) => vec![inputs],
                 Err(_) => {
+                    #[cfg(feature = "inlet_log")]
                     bevy::log::warn!("controller disconnected");
                     bindings.assigned_gamepad = None;
                     Vec::new()
@@ -114,18 +134,10 @@ pub fn system_gather_button_inputs<K, T>(
             Vec::new()
         };
 
-        if let Some(new) = new_settings {
-            if let Ok(mut e_cmds) = commands.get_entity(entity) {
-                e_cmds.try_remove::<ClashSettings>();
-            }
-            input_handler.set_settings(*new);
-            bindings.change();
-        }
-
         if bindings.changed() {
             input_handler.update_list(&bindings.bindings);
         } else {
-            input_handler.tick();
+            input_handler.tick(clash_settings);
         }
 
         input_handler.update(
@@ -153,27 +165,18 @@ pub fn system_gather_button_inputs<K, T>(
                     for (i, button_binding) in action_binding.bindings.iter_mut().enumerate() {
                         let v = match button_binding {
                             ButtonBinding::Chord(button_chord) => input_handler
-                                .poll(&button_chord.input_kinds())
+                                .poll(&button_chord.input_kinds(), clash_settings)
                                 .map(|v| button_chord.apply(v)),
                             ButtonBinding::Combo(button_combo) => {
-                                // Either differ to re-poll or check if the next expected button is pressed.
-                                let expected = button_combo.expected_binding_mut();
-                                let out = input_handler.poll(&[expected.kind()]);
-                                if let Some(o) = out {
-                                    if expected.apply(o) {
-                                        Some(
-                                            expected_is_pressed(button_combo, input_handler)
-                                                .is_pressed(),
-                                        )
-                                    } else {
-                                        Some(false)
-                                    }
-                                } else {
-                                    None
-                                }
+                                let expected =
+                                    button_combo.expected_binding_mut(combo_settings.tolerence());
+                                // Always defer to repoll for combos so that we can properly detect
+                                // combo breaking hits.
+                                input_handler.poll(&[expected.kind()], clash_settings);
+                                None
                             }
                             ButtonBinding::Single(bevy_input_kind) => input_handler
-                                .poll(&[bevy_input_kind.kind()])
+                                .poll(&[bevy_input_kind.kind()], clash_settings)
                                 .map(|v| v.is_pressed()),
                         };
                         if let Some(p) = v {
@@ -200,6 +203,7 @@ pub fn system_gather_button_inputs<K, T>(
                     match check_axes(
                         &mut value_binding.bindings,
                         input_handler,
+                        clash_settings,
                         value_binding.mock,
                     ) {
                         Ok(v) => {
@@ -220,11 +224,13 @@ pub fn system_gather_button_inputs<K, T>(
                     let x = check_axes(
                         &mut dual_value_binding.x_bindings,
                         input_handler,
+                        clash_settings,
                         dual_value_binding.x_mock,
                     );
                     let y = check_axes(
                         &mut dual_value_binding.y_bindings,
                         input_handler,
+                        clash_settings,
                         dual_value_binding.y_mock,
                     );
 
@@ -279,11 +285,36 @@ pub fn system_gather_button_inputs<K, T>(
                                     button_chord.apply(out)
                                 }
                                 ButtonBinding::Combo(button_combo) => {
-                                    let b = button_combo.expected_binding_mut();
-                                    let out = input_handler.repoll(&[b.kind()]);
-                                    if b.apply(out) {
-                                        expected_is_pressed(button_combo, input_handler)
-                                            .is_pressed()
+                                    let b =
+                                        button_combo.expected_binding(combo_settings.tolerence());
+                                    let mut check = Vec::with_capacity(3);
+                                    check.push(b.kind());
+                                    let out = input_handler.repoll(&check);
+                                    if let Some(prev) = button_combo.previous_binding() {
+                                        check.push(prev.kind());
+                                    }
+                                    if let Some(next) = button_combo.next_binding() {
+                                        check.push(next.kind());
+                                    }
+                                    if match combo_settings.interupt_settings() {
+                                        ComboInterputSettings::NoBreak => false,
+                                        ComboInterputSettings::ButtonsBreak => {
+                                            input_handler.poll_interupt(&check, false)
+                                        }
+                                        ComboInterputSettings::AnythingBreaks => {
+                                            input_handler.poll_interupt(&check, true)
+                                        }
+                                    } {
+                                        button_combo.interupt();
+                                        false
+                                    } else if b.apply(out) {
+                                        expected_is_pressed(
+                                            button_combo,
+                                            input_handler,
+                                            clash_settings,
+                                            combo_settings,
+                                        )
+                                        .is_pressed()
                                     } else {
                                         false
                                     }
@@ -343,24 +374,27 @@ struct Repoll<K> {
 fn check_axes(
     bindings: &mut [AxisBinding],
     handler: &mut InputHandler,
+    clash_settings: &ClashSettings,
     mock: Option<f32>,
 ) -> Result<f32, (f32, Vec<usize>)> {
     let mut re = Vec::default();
     let (mut value, mut count) = if let Some(m) = mock { (m, 1) } else { (0., 0) };
     for (i, b) in bindings.iter_mut().enumerate() {
         let v = match b.kind() {
-            AxisBindingKind::Single(bevy_input_kind) => handler.poll(&[*bevy_input_kind]),
+            AxisBindingKind::Single(bevy_input_kind) => {
+                handler.poll(&[*bevy_input_kind], clash_settings)
+            }
             AxisBindingKind::Buttons { plus, minus } => {
                 let p = if let Some(binding) = plus {
                     handler
-                        .poll(&[binding.kind()])
+                        .poll(&[binding.kind()], clash_settings)
                         .map(|out| pressed_to_value(binding.apply(out)))
                 } else {
                     Some(0.)
                 };
                 let m = if let Some(binding) = minus {
                     handler
-                        .poll(&[binding.kind()])
+                        .poll(&[binding.kind()], clash_settings)
                         .map(|out| pressed_to_value(binding.apply(out)))
                 } else {
                     Some(0.)

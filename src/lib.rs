@@ -152,6 +152,11 @@ impl Default for InputValue {
 }
 
 impl InputValue {
+    /// Returns `true` if the value is a `Self::Pressed(_)`
+    /// or `false` if `Self::Value(_)`.
+    pub fn is_button(&self) -> bool {
+        matches!(self, Self::Pressed(_))
+    }
     /// Returns true if `self` is:
     /// - `Self::Button(true)`.
     /// - `Self::Value(val)` where `val != 0`.
@@ -516,9 +521,6 @@ where
             assigned_gamepad: None,
             changed: true,
         }
-    }
-    pub(crate) fn change(&mut self) {
-        self.changed = true;
     }
     /// Returns `true` when binding detects changes to inner map. The input system should also set changed
     /// when a new [`ClashSettings`](crate::manager::ClashSettings) is applied.

@@ -1,6 +1,6 @@
 [package]
 name = "inlet"
-version = "0.4.1"
+version = "0.5.0-alpha.0"
 edition = "2024"
 description = "Input management with configurable bindings for Bevy game engine."
 authors = ["Dev <devlynknelson@gmail.com>"]
@@ -12,7 +12,10 @@ keywords = ["bevy"]
 [dependencies.bevy]
 version = "0.19"
 default-features = false
-features = ["keyboard", "mouse", "gamepad", "bevy_log"]
+features = ["keyboard", "mouse", "gamepad"]
+
+[features]
+inlet_log = ["bevy/bevy_log"]
 
 [dev-dependencies.bevy]
 version = "0.19"
