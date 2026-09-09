@@ -167,22 +167,11 @@ pub fn system_gather_button_inputs<K, T>(
                                 .poll(&button_chord.input_kinds(), clash_settings)
                                 .map(|v| button_chord.apply(v)),
                             ButtonBinding::Combo(button_combo) => {
-                                // Either differ to re-poll or check if the next expected button is pressed.
                                 let expected =
                                     button_combo.expected_binding_mut(combo_settings.tolerence());
-                                let _out = input_handler.poll(&[expected.kind()], clash_settings);
-                                // if let Some(o) = out {
-                                //     if expected.apply(o) {
-                                //         Some(
-                                //             expected_is_pressed(button_combo, input_handler)
-                                //                 .is_pressed(),
-                                //         )
-                                //     } else {
-                                //         Some(false)
-                                //     }
-                                // } else {
-                                //     None
-                                // }
+                                // Always defer to repoll for combos so that we can properly detect
+                                // combo breaking hits.
+                                input_handler.poll(&[expected.kind()], clash_settings);
                                 None
                             }
                             ButtonBinding::Single(bevy_input_kind) => input_handler

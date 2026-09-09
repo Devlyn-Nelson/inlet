@@ -544,6 +544,7 @@ pub struct ActionBinding<T> {
     pub(crate) event: ButtonEventBinding<T>,
     pub(crate) state: ButtonState,
     pub(crate) mocked: bool,
+    auto_hold: Option<Duration>,
 }
 
 impl<T> ActionBinding<T> {
@@ -606,15 +607,11 @@ impl<T> ActionBinding<T> {
             event,
             state: ButtonState::default(),
             mocked: false,
+            auto_hold: None,
         }
     }
     pub fn new_no_event(bindings: Vec<ButtonBinding>) -> Self {
-        Self {
-            bindings,
-            event: ButtonEventBinding::None,
-            state: ButtonState::default(),
-            mocked: false,
-        }
+        Self::new(bindings, ButtonEventBinding::None)
     }
 
     /// Returns a reference to the current state of the binding.
@@ -629,6 +626,14 @@ impl<T> ActionBinding<T> {
 
     /// Feeds the state of the binding and returns a `T` if configured to do so for the current state.
     pub fn feed(&mut self, pressed: bool) -> Option<T> {
+        let pressed = if let Some(hold) = self.auto_hold
+            && self.state.kind().is_pressed()
+            && self.state.start.elapsed() < hold
+        {
+            true
+        } else {
+            pressed
+        };
         if self.state.feed(pressed) {
             self.event.try_get_event(&self.state)
         } else {
@@ -640,6 +645,10 @@ impl<T> ActionBinding<T> {
     }
     pub fn mock_clear(&mut self) {
         self.mocked = false;
+    }
+    pub fn with_auto_hold(mut self, hold_for: Duration) -> Self {
+        self.auto_hold = Some(hold_for);
+        self
     }
 }
 

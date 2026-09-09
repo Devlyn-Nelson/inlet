@@ -3,11 +3,13 @@ use std::time::Duration;
 use bevy::{color::palettes::basic, prelude::*};
 use inlet::{
     InputBindingsSimple, InputManagementPluginSimple,
-    button::{ButtonChord, ButtonCombo},
-    manager::ClashSettings,
+    button::{ActionBinding, ButtonChord, ButtonCombo},
+    manager::{ClashSettings, ComboInterputSettings, ComboProgressionSettings, ComboSettings},
 };
 
 const BUFFER_TIME: Duration = Duration::from_millis(500);
+const AUTO_HOLD: Duration = Duration::from_millis(500);
+const COMBO_TOLERANCE: Duration = Duration::from_millis(500);
 
 fn main() {
     App::new()
@@ -31,11 +33,17 @@ enum InputTypes {
     ComboOneTwo,
     ComboOneTwoThree,
     ComboOneTwoThreeFour,
-    ToggleSettings,
+    ToggleClashSetting,
+    ToggleComboInteruptSetting,
+    ToggleComboProgressionSetting,
 }
 
 #[derive(Component)]
 struct ClashText;
+#[derive(Component)]
+struct ComboInteruptText;
+#[derive(Component)]
+struct ComboProgressionText;
 
 // # Singles
 #[derive(Component)]
@@ -77,8 +85,14 @@ fn setup(
     commands.spawn((
         Camera2d,
         ClashSettings::Unbuffered,
+        ComboSettings::default().with_tolerence(COMBO_TOLERANCE),
         InputBindingsSimple::<InputTypes>::new()
-            .with_action_binding(InputTypes::ToggleSettings, KeyCode::F1.into())
+            .with_action_binding(InputTypes::ToggleClashSetting, KeyCode::F1.into())
+            .with_action_binding(InputTypes::ToggleComboInteruptSetting, KeyCode::F2.into())
+            .with_action_binding(
+                InputTypes::ToggleComboProgressionSetting,
+                KeyCode::F3.into(),
+            )
             .with_action_binding(InputTypes::One, KeyCode::KeyA.into())
             .with_action_binding(InputTypes::Two, KeyCode::KeyS.into())
             .with_action_binding(InputTypes::Three, KeyCode::KeyD.into())
@@ -108,61 +122,71 @@ fn setup(
             )
             .with_action_binding(
                 InputTypes::ComboOneTwo,
-                ButtonCombo::new(vec![KeyCode::KeyA.into(), KeyCode::KeyS.into()]).into(),
+                ActionBinding::new_no_event(vec![
+                    ButtonCombo::new(vec![KeyCode::KeyA.into(), KeyCode::KeyS.into()]).into(),
+                ])
+                .with_auto_hold(AUTO_HOLD),
             )
             .with_action_binding(
                 InputTypes::ComboOneTwoThree,
-                ButtonCombo::new(vec![
-                    KeyCode::KeyA.into(),
-                    KeyCode::KeyS.into(),
-                    KeyCode::KeyD.into(),
+                ActionBinding::new_no_event(vec![
+                    ButtonCombo::new(vec![
+                        KeyCode::KeyA.into(),
+                        KeyCode::KeyS.into(),
+                        KeyCode::KeyD.into(),
+                    ])
+                    .into(),
                 ])
-                .into(),
+                .with_auto_hold(AUTO_HOLD),
             )
             .with_action_binding(
                 InputTypes::ComboOneTwoThreeFour,
-                ButtonCombo::new(vec![
-                    KeyCode::KeyA.into(),
-                    KeyCode::KeyS.into(),
-                    KeyCode::KeyD.into(),
-                    KeyCode::KeyF.into(),
+                ActionBinding::new_no_event(vec![
+                    ButtonCombo::new(vec![
+                        KeyCode::KeyA.into(),
+                        KeyCode::KeyS.into(),
+                        KeyCode::KeyD.into(),
+                        KeyCode::KeyF.into(),
+                    ])
+                    .into(),
                 ])
-                .into(),
+                .with_auto_hold(AUTO_HOLD),
             ),
     ));
 
     // Display the current clash settings.
     commands
-        .spawn((
-            Text::new("Clash Settings: "),
-            TextFont {
-                font_size: FontSize::Px(32.0),
-                ..default()
-            },
-        ))
-        .with_child((
-            TextSpan::new("Unbuffered"),
-            TextFont {
-                font_size: FontSize::Px(32.0),
-                ..Default::default()
-            },
-            ClashText,
-        ));
+        .spawn((Node::default(), Text::new("Settings:")))
+        .with_children(|p| {
+            p.spawn((TextSpan::new("\n  Clash Setting: "),))
+                .with_child((
+                    TextSpan::new(format!("{:?}", ClashSettings::default())),
+                    ClashText,
+                ));
+            p.spawn((TextSpan::new("\n  Combo Progression Setting: "),))
+                .with_child((
+                    TextSpan::new(format!("{:?}", ComboProgressionSettings::default())),
+                    ComboProgressionText,
+                ));
+            p.spawn((TextSpan::new("\n  Combo Interupt Setting: "),))
+                .with_child((
+                    TextSpan::new(format!("{:?}", ComboInterputSettings::default())),
+                    ComboInteruptText,
+                ));
+        });
 
     let red = materials.add(Color::from(basic::RED));
     let green = materials.add(Color::from(basic::GREEN));
 
     // # Singles
-    commands
-        .spawn((
-            Mesh2d(meshes.add(Rectangle::default())),
-            MeshMaterial2d(red.clone()),
-            Transform::default()
-                .with_translation(Vec3::new(-256. - 128., 0., 0.))
-                .with_scale(Vec3::splat(128.)),
-            One,
-        ))
-        .with_child(Text::new("A"));
+    commands.spawn((
+        Mesh2d(meshes.add(Rectangle::default())),
+        MeshMaterial2d(red.clone()),
+        Transform::default()
+            .with_translation(Vec3::new(-256. - 128., 0., 0.))
+            .with_scale(Vec3::splat(128.)),
+        One,
+    ));
     commands.spawn((
         Mesh2d(meshes.add(Rectangle::default())),
         MeshMaterial2d(red.clone()),
@@ -246,7 +270,11 @@ fn setup(
 fn update(
     mut commands: Commands,
     colors: Option<Res<Colors>>,
-    mut player: Single<(&InputBindingsSimple<InputTypes>, &mut ClashSettings)>,
+    mut player: Single<(
+        &InputBindingsSimple<InputTypes>,
+        &mut ClashSettings,
+        &mut ComboSettings,
+    )>,
     one: Single<Entity, With<One>>,
     two: Single<Entity, With<Two>>,
     three: Single<Entity, With<Three>>,
@@ -257,7 +285,30 @@ fn update(
     combo_onetwo: Single<Entity, With<ComboOneTwo>>,
     combo_onetwothree: Single<Entity, With<ComboOneTwoThree>>,
     combo_onetwothreefour: Single<Entity, With<ComboOneTwoThreeFour>>,
-    mut clash_text: Single<&mut TextSpan, With<ClashText>>,
+    mut clash_text: Single<
+        &mut TextSpan,
+        (
+            With<ClashText>,
+            Without<ComboInteruptText>,
+            Without<ComboProgressionText>,
+        ),
+    >,
+    mut interupt_text: Single<
+        &mut TextSpan,
+        (
+            With<ComboInteruptText>,
+            Without<ClashText>,
+            Without<ComboProgressionText>,
+        ),
+    >,
+    mut progression_text: Single<
+        &mut TextSpan,
+        (
+            With<ComboProgressionText>,
+            Without<ClashText>,
+            Without<ComboInteruptText>,
+        ),
+    >,
 ) {
     let Some(colors) = colors else {
         return;
@@ -437,24 +488,39 @@ fn update(
     }
 
     // # Settings
-    if player.0.just_pressed(&InputTypes::ToggleSettings) {
+    if player.0.just_pressed(&InputTypes::ToggleClashSetting) {
         *player.1 = match *player.1 {
-            ClashSettings::Unbuffered => {
-                ***clash_text = format!("BufferClashing");
-                ClashSettings::BufferClashing(Some(BUFFER_TIME))
-            }
-            ClashSettings::BufferClashing(_) => {
-                ***clash_text = format!("BufferAll");
-                ClashSettings::BufferAll(Some(BUFFER_TIME))
-            }
-            ClashSettings::BufferAll(_) => {
-                ***clash_text = format!("Disabled");
-                ClashSettings::Disabled
-            }
-            ClashSettings::Disabled => {
-                ***clash_text = format!("Unbuffered");
-                ClashSettings::Unbuffered
+            ClashSettings::Unbuffered => ClashSettings::BufferClashing(Some(BUFFER_TIME)),
+            ClashSettings::BufferClashing(_) => ClashSettings::BufferAll(Some(BUFFER_TIME)),
+            ClashSettings::BufferAll(_) => ClashSettings::Disabled,
+            ClashSettings::Disabled => ClashSettings::Unbuffered,
+        };
+        ***clash_text = format!("{:?}", *player.1);
+    }
+    if player
+        .0
+        .just_pressed(&InputTypes::ToggleComboInteruptSetting)
+    {
+        let new_setting = match player.2.interupt_settings() {
+            ComboInterputSettings::NoBreak => ComboInterputSettings::AnythingBreaks,
+            ComboInterputSettings::ButtonsBreak => ComboInterputSettings::NoBreak,
+            ComboInterputSettings::AnythingBreaks => ComboInterputSettings::ButtonsBreak,
+        };
+        ***interupt_text = format!("{:?}", new_setting);
+        player.2.set_interupt_settings(new_setting);
+    }
+    if player
+        .0
+        .just_pressed(&InputTypes::ToggleComboProgressionSetting)
+    {
+        let new_setting = match player.2.progression_settings() {
+            ComboProgressionSettings::None => ComboProgressionSettings::NextMustBeReleased,
+            ComboProgressionSettings::PreviousMustBeReleased => ComboProgressionSettings::None,
+            ComboProgressionSettings::NextMustBeReleased => {
+                ComboProgressionSettings::PreviousMustBeReleased
             }
         };
+        ***progression_text = format!("{:?}", new_setting);
+        player.2.set_progression_settings(new_setting);
     }
 }
