@@ -33,13 +33,13 @@ enum InputStateKind {
     /// the same `usize` for at least 1 frame.
     Buffered {
         start: Instant,
-        coord_len: usize,
-        last_coord_len: usize,
+        chord_len: usize,
+        last_chord_len: usize,
     },
     /// State is currently active if you meet the priority stored.
     Active {
-        coord_len: usize,
-        last_coord_len: usize,
+        chord_len: usize,
+        last_chord_len: usize,
     },
 }
 
@@ -53,21 +53,14 @@ impl InputStateKind {
     fn buffered(len: usize) -> Self {
         Self::Buffered {
             start: Instant::now(),
-            coord_len: len,
-            last_coord_len: len,
+            chord_len: len,
+            last_chord_len: len,
         }
     }
-    // fn buffered_with_instant(len: usize, i: Instant) -> Self {
-    //     Self::Buffered {
-    //         start: i,
-    //         coord_len: len,
-    //         last_coord_len: len,
-    //     }
-    // }
     fn active(len: usize) -> Self {
         Self::Active {
-            coord_len: len,
-            last_coord_len: len,
+            chord_len: len,
+            last_chord_len: len,
         }
     }
     fn replace(&mut self, new: Self) {
@@ -81,8 +74,8 @@ impl Display for InputStateKind {
             InputStateKind::NoClash => write!(f, "NoClash"),
             InputStateKind::Inactive => write!(f, "Inactive"),
             InputStateKind::Clashing(len) => write!(f, "Clashing({len})"),
-            InputStateKind::Buffered { coord_len, .. } => write!(f, "Buffered({coord_len})"),
-            InputStateKind::Active { coord_len, .. } => write!(f, "Active({coord_len})"),
+            InputStateKind::Buffered { chord_len, .. } => write!(f, "Buffered({chord_len})"),
+            InputStateKind::Active { chord_len, .. } => write!(f, "Active({chord_len})"),
         }
     }
 }
@@ -165,6 +158,8 @@ pub enum ClashSettings {
     ///   binding can see it again.
     /// - If a chord has multiple buffered inputs, all inputs start times will be set the the oldest.
     BufferAll(Option<Duration>),
+    /// Disables Clash Detection. All presses will become active immediatly.
+    Disabled,
 }
 
 impl ClashSettings {
@@ -286,9 +281,9 @@ pub struct InputHandler {
     frame: usize,
     /// All known bindings and the state of the input.
     clashables: HashMap<BevyInputKind, InputState>,
-    /// reset the coord length on tick so that smaller coords can become active
-    /// after releasing a larger coord.
-    coord_regretion: bool,
+    /// reset the chord length on tick so that smaller chords can become active
+    /// after releasing a larger chord.
+    chord_regretion: bool,
 }
 
 impl Default for InputHandler {
@@ -296,7 +291,7 @@ impl Default for InputHandler {
         Self {
             frame: 0,
             clashables: HashMap::default(),
-            coord_regretion: false,
+            chord_regretion: false,
         }
     }
 }
@@ -313,15 +308,15 @@ enum Outy {
 }
 
 impl InputHandler {
-    /// Whether to reset the coord length on tick so that smaller coords can become
-    /// active after releasing a larger coord.
-    pub fn coord_regretion(&self) -> bool {
-        self.coord_regretion
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn chord_regretion(&self) -> bool {
+        self.chord_regretion
     }
-    /// Whether to reset the coord length on tick so that smaller coords can become
-    /// active after releasing a larger coord.
-    pub fn set_coord_regretion(&mut self, coord_regretion: bool) {
-        self.coord_regretion = coord_regretion;
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn set_chord_regretion(&mut self, chord_regretion: bool) {
+        self.chord_regretion = chord_regretion;
     }
     /// Does some internal cleaning that is only possible between bindings checking for their inputs
     /// because we can assume that all (or none) of the inputs have been given a change to fight for priority.
@@ -332,7 +327,7 @@ impl InputHandler {
     /// - increases the internal counter for "frames" after all above steps.
     ///
     pub fn tick(&mut self, clash_settings: &ClashSettings) {
-        let cr = self.coord_regretion();
+        let cr = self.chord_regretion();
         for (_c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
                 if matches!(
@@ -347,23 +342,23 @@ impl InputHandler {
             | ClashSettings::BufferAll(duration) = clash_settings
                 && let InputStateKind::Buffered {
                     start,
-                    coord_len,
-                    last_coord_len,
+                    chord_len,
+                    last_chord_len,
                 } = &state.kind
             {
                 if let Some(d) = duration {
                     if start.elapsed() >= *d {
                         Some(InputStateKind::Active {
-                            coord_len: *coord_len,
-                            last_coord_len: *last_coord_len,
+                            chord_len: *chord_len,
+                            last_chord_len: *last_chord_len,
                         })
                     } else {
                         None
                     }
                 } else {
                     Some(InputStateKind::Active {
-                        coord_len: *coord_len,
-                        last_coord_len: *last_coord_len,
+                        chord_len: *chord_len,
+                        last_chord_len: *last_chord_len,
                     })
                 }
             } else if let InputStateKind::Clashing(priority) = &state.kind {
@@ -373,17 +368,17 @@ impl InputHandler {
             };
             match &mut state.kind {
                 InputStateKind::Buffered {
-                    coord_len,
-                    last_coord_len,
+                    chord_len,
+                    last_chord_len,
                     ..
                 }
                 | InputStateKind::Active {
-                    coord_len,
-                    last_coord_len,
+                    chord_len,
+                    last_chord_len,
                 } => {
-                    *last_coord_len = *coord_len;
+                    *last_chord_len = *chord_len;
                     if cr {
-                        *coord_len = 0;
+                        *chord_len = 0;
                     }
                 }
                 _ => {}
@@ -498,6 +493,7 @@ impl InputHandler {
                         ClashSettings::BufferAll(_) | ClashSettings::BufferClashing(_) => {
                             Some(InputStateKind::buffered(chord_length))
                         }
+                        ClashSettings::Disabled => Some(InputStateKind::active(chord_length)),
                     },
                     InputStateKind::Clashing(len) => {
                         if chord_length > *len {
@@ -508,32 +504,32 @@ impl InputHandler {
                     }
                     InputStateKind::Buffered {
                         start,
-                        coord_len,
-                        last_coord_len,
+                        chord_len,
+                        last_chord_len,
                     } => {
                         if let Some(oldest) = oldest_press
                             && oldest < *start
                         {
                             *start = oldest;
                         }
-                        if chord_length > *coord_len {
+                        if chord_length > *chord_len {
                             Some(InputStateKind::Buffered {
                                 start: *start,
-                                coord_len: chord_length,
-                                last_coord_len: *last_coord_len,
+                                chord_len: chord_length,
+                                last_chord_len: *last_chord_len,
                             })
                         } else {
                             None
                         }
                     }
                     InputStateKind::Active {
-                        coord_len,
-                        last_coord_len,
+                        chord_len,
+                        last_chord_len,
                     } => {
-                        if chord_length > *coord_len {
+                        if chord_length > *chord_len {
                             Some(InputStateKind::Active {
-                                coord_len: chord_length,
-                                last_coord_len: *last_coord_len,
+                                chord_len: chord_length,
+                                last_chord_len: *last_chord_len,
                             })
                         } else {
                             None
@@ -561,10 +557,10 @@ impl InputHandler {
                     }
                 }
                 InputStateKind::Active {
-                    last_coord_len: coord_len,
+                    last_chord_len: chord_len,
                     ..
                 } => {
-                    if *coord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
+                    if *chord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
                         repoll = Outy::Hide;
                     }
                 }
@@ -600,9 +596,9 @@ impl InputHandler {
                         return InputValue::default();
                     }
                     InputStateKind::NoClash => {}
-                    InputStateKind::Clashing(coord_len)
-                    | InputStateKind::Active { coord_len, .. } => {
-                        if clashable.len() != *coord_len {
+                    InputStateKind::Clashing(chord_len)
+                    | InputStateKind::Active { chord_len, .. } => {
+                        if clashable.len() != *chord_len {
                             return InputValue::default();
                         }
                     }
