@@ -124,6 +124,7 @@ pub fn system_gather_button_inputs<K, T>(
             match gamepad_query.get(*gamepad) {
                 Ok(inputs) => vec![inputs],
                 Err(_) => {
+                    #[cfg(feature = "inlet_log")]
                     bevy::log::warn!("controller disconnected");
                     bindings.assigned_gamepad = None;
                     Vec::new()

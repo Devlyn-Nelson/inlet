@@ -464,6 +464,7 @@ impl InputHandler {
                     }
                 }
                 Entry::Vacant(v) => {
+                    #[cfg(feature = "inlet_log")]
                     bevy::log::warn!("polled unregistered bevy input in manager. ({c:?})");
                     v.insert(InputState {
                         frame: self.frame,

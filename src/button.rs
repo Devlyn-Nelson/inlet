@@ -196,6 +196,7 @@ impl ButtonCombo {
     }
     /// Creates a new button combo bindings.
     pub fn new(bindings: Vec<ButtonBindingKind>) -> Self {
+        #[cfg(feature = "inlet_log")]
         if bindings.len() <= 1 {
             bevy::log::warn!("inlet detected a button combo that is less than 2 buttons long.")
         }
