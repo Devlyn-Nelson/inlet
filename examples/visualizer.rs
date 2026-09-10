@@ -4,7 +4,10 @@ use bevy::{color::palettes::basic, prelude::*};
 use inlet::{
     InputBindingsSimple, InputManagementPluginSimple,
     button::{ActionBinding, ButtonChord, ButtonCombo},
-    manager::{ClashSettings, ComboInterputSettings, ComboProgressionSettings, ComboSettings},
+    manager::{
+        ClashSettings, ClashStrategy, ComboInterputSettings, ComboProgressionSettings,
+        ComboSettings,
+    },
 };
 
 const BUFFER_TIME: Duration = Duration::from_millis(500);
@@ -16,7 +19,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(InputManagementPluginSimple::<InputTypes>::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, update)
+        .add_systems(Update, (update, update_text))
         .run();
 }
 
@@ -33,13 +36,16 @@ enum InputTypes {
     ComboOneTwo,
     ComboOneTwoThree,
     ComboOneTwoThreeFour,
-    ToggleClashSetting,
+    ToggleClashStrategy,
+    ToggleChordRegression,
     ToggleComboInteruptSetting,
     ToggleComboProgressionSetting,
 }
 
 #[derive(Component)]
-struct ClashText;
+struct ClashStrategyText;
+#[derive(Component)]
+struct ChordRegressionText;
 #[derive(Component)]
 struct ComboInteruptText;
 #[derive(Component)]
@@ -84,14 +90,15 @@ fn setup(
 ) {
     commands.spawn((
         Camera2d,
-        ClashSettings::Unbuffered,
+        ClashSettings::from(ClashStrategy::Unbuffered),
         ComboSettings::default().with_tolerence(COMBO_TOLERANCE),
         InputBindingsSimple::<InputTypes>::new()
-            .with_action_binding(InputTypes::ToggleClashSetting, KeyCode::F1.into())
-            .with_action_binding(InputTypes::ToggleComboInteruptSetting, KeyCode::F2.into())
+            .with_action_binding(InputTypes::ToggleClashStrategy, KeyCode::F1.into())
+            .with_action_binding(InputTypes::ToggleChordRegression, KeyCode::F2.into())
+            .with_action_binding(InputTypes::ToggleComboInteruptSetting, KeyCode::F3.into())
             .with_action_binding(
                 InputTypes::ToggleComboProgressionSetting,
-                KeyCode::F3.into(),
+                KeyCode::F4.into(),
             )
             .with_action_binding(InputTypes::One, KeyCode::KeyA.into())
             .with_action_binding(InputTypes::Two, KeyCode::KeyS.into())
@@ -161,14 +168,19 @@ fn setup(
             p.spawn((TextSpan::new("\nF1 Clash Setting: "),))
                 .with_child((
                     TextSpan::new(format!("{:?}", ClashSettings::default())),
-                    ClashText,
+                    ClashStrategyText,
                 ));
-            p.spawn((TextSpan::new("\nF2 Combo Interupt Setting: "),))
+            p.spawn((TextSpan::new("\nF2 Chord Regression: "),))
+                .with_child((
+                    TextSpan::new(format!("{:?}", ClashSettings::default())),
+                    ChordRegressionText,
+                ));
+            p.spawn((TextSpan::new("\nF3 Combo Interupt Setting: "),))
                 .with_child((
                     TextSpan::new(format!("{:?}", ComboInterputSettings::default())),
                     ComboInteruptText,
                 ));
-            p.spawn((TextSpan::new("\nF3 Combo Progression Setting: "),))
+            p.spawn((TextSpan::new("\nF4 Combo Progression Setting: "),))
                 .with_child((
                     TextSpan::new(format!("{:?}", ComboProgressionSettings::default())),
                     ComboProgressionText,
@@ -177,6 +189,8 @@ fn setup(
 
     let red = materials.add(Color::from(basic::RED));
     let green = materials.add(Color::from(basic::GREEN));
+    // TODO add labels for collums (A squares, S squares, D squares, F squares)
+    // TODO add labels for rows (chrod squares, single-press squares, combo squares)
 
     // # Singles
     commands.spawn((
@@ -285,30 +299,6 @@ fn update(
     combo_onetwo: Single<Entity, With<ComboOneTwo>>,
     combo_onetwothree: Single<Entity, With<ComboOneTwoThree>>,
     combo_onetwothreefour: Single<Entity, With<ComboOneTwoThreeFour>>,
-    mut clash_text: Single<
-        &mut TextSpan,
-        (
-            With<ClashText>,
-            Without<ComboInteruptText>,
-            Without<ComboProgressionText>,
-        ),
-    >,
-    mut interupt_text: Single<
-        &mut TextSpan,
-        (
-            With<ComboInteruptText>,
-            Without<ClashText>,
-            Without<ComboProgressionText>,
-        ),
-    >,
-    mut progression_text: Single<
-        &mut TextSpan,
-        (
-            With<ComboProgressionText>,
-            Without<ClashText>,
-            Without<ComboInteruptText>,
-        ),
-    >,
 ) {
     let Some(colors) = colors else {
         return;
@@ -488,14 +478,18 @@ fn update(
     }
 
     // # Settings
-    if player.0.just_pressed(&InputTypes::ToggleClashSetting) {
-        *player.1 = match *player.1 {
-            ClashSettings::Unbuffered => ClashSettings::BufferClashing(Some(BUFFER_TIME)),
-            ClashSettings::BufferClashing(_) => ClashSettings::BufferAll(Some(BUFFER_TIME)),
-            ClashSettings::BufferAll(_) => ClashSettings::Disabled,
-            ClashSettings::Disabled => ClashSettings::Unbuffered,
+    if player.0.just_pressed(&InputTypes::ToggleClashStrategy) {
+        let new_setting = match player.1.clash_strategy() {
+            ClashStrategy::Unbuffered => ClashStrategy::BufferClashing(Some(BUFFER_TIME)),
+            ClashStrategy::BufferClashing(_) => ClashStrategy::BufferAll(Some(BUFFER_TIME)),
+            ClashStrategy::BufferAll(_) => ClashStrategy::Disabled,
+            ClashStrategy::Disabled => ClashStrategy::Unbuffered,
         };
-        ***clash_text = format!("{:?}", *player.1);
+        player.1.set_clash_strategy(new_setting);
+    }
+    if player.0.just_pressed(&InputTypes::ToggleChordRegression) {
+        let new_setting = !player.1.chord_regretion();
+        player.1.set_chord_regretion(new_setting);
     }
     if player
         .0
@@ -506,7 +500,6 @@ fn update(
             ComboInterputSettings::ButtonsBreak => ComboInterputSettings::NoBreak,
             ComboInterputSettings::AnythingBreaks => ComboInterputSettings::ButtonsBreak,
         };
-        ***interupt_text = format!("{:?}", new_setting);
         player.2.set_interupt_settings(new_setting);
     }
     if player
@@ -520,7 +513,51 @@ fn update(
                 ComboProgressionSettings::PreviousMustBeReleased
             }
         };
-        ***progression_text = format!("{:?}", new_setting);
         player.2.set_progression_settings(new_setting);
     }
+}
+
+fn update_text(
+    player: Single<(&ClashSettings, &ComboSettings)>,
+    mut clash_strat_text: Single<
+        &'static mut TextSpan,
+        (
+            With<ClashStrategyText>,
+            Without<ComboInteruptText>,
+            Without<ComboProgressionText>,
+            Without<ChordRegressionText>,
+        ),
+    >,
+    mut chord_regression_text: Single<
+        &'static mut TextSpan,
+        (
+            With<ChordRegressionText>,
+            Without<ClashStrategyText>,
+            Without<ComboInteruptText>,
+            Without<ComboProgressionText>,
+        ),
+    >,
+    mut interupt_text: Single<
+        &'static mut TextSpan,
+        (
+            With<ComboInteruptText>,
+            Without<ClashStrategyText>,
+            Without<ComboProgressionText>,
+            Without<ChordRegressionText>,
+        ),
+    >,
+    mut progression_text: Single<
+        &'static mut TextSpan,
+        (
+            With<ComboProgressionText>,
+            Without<ClashStrategyText>,
+            Without<ComboInteruptText>,
+            Without<ChordRegressionText>,
+        ),
+    >,
+) {
+    ***clash_strat_text = format!("{:?}", player.0.clash_strategy());
+    ***chord_regression_text = format!("{}", player.0.chord_regretion());
+    ***interupt_text = format!("{:?}", player.1.interupt_settings());
+    ***progression_text = format!("{:?}", player.1.progression_settings());
 }

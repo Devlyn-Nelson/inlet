@@ -22,19 +22,22 @@ use crate::{BevyAxisKind, BevyButtonKind, BevyInputKind, InputBinding, InputValu
 /// Current state of an input.
 #[derive(Debug, Default)]
 enum InputStateKind {
-    /// Exactly 1 binding has been made to this input. Clash checks can be ignored.
-    #[default]
-    NoClash,
     /// State is currently inactive.
+    #[default]
     Inactive,
     /// At least 1 input wants to
     Clashing(usize),
     /// Input is being buffered and is being reported as inactive, shall become released with
     /// the same `usize` for at least 1 frame.
     Buffered {
+        /// When the buffered state was entered.
         start: Instant,
+        /// Current largest chord trying to access the binding.
         chord_len: usize,
+        /// Largest chord trying to access the binding in the previous frame.
         last_chord_len: usize,
+        /// Amount of inputs trying to access this binding.
+        count: usize,
     },
     /// State is currently active if you meet the priority stored.
     Active {
@@ -55,6 +58,7 @@ impl InputStateKind {
             start: Instant::now(),
             chord_len: len,
             last_chord_len: len,
+            count: 1,
         }
     }
     fn active(len: usize) -> Self {
@@ -71,7 +75,6 @@ impl InputStateKind {
 impl Display for InputStateKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InputStateKind::NoClash => write!(f, "NoClash"),
             InputStateKind::Inactive => write!(f, "Inactive"),
             InputStateKind::Clashing(len) => write!(f, "Clashing({len})"),
             InputStateKind::Buffered { chord_len, .. } => write!(f, "Buffered({chord_len})"),
@@ -107,21 +110,62 @@ impl DerefMut for DefaultClashSettings {
         &mut self.0
     }
 }
-
 /// The settings to use for resolving clashing inputs.
 ///
-/// # Component
-///
-/// If inserted on an entity that has a InputHandler, the InputHandler will use new settings and remove the
-///
-/// # Resource
-///
-/// Defines a default settings that new [`InputHandler`] can pull from.
-///
-#[derive(Component, Clone, Copy, Debug)]
-/// component to avoid extra checks.
-#[derive(Default)]
-pub enum ClashSettings {
+/// attach to an entity to override global clash settings.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct ClashSettings {
+    strat: ClashStrategy,
+    /// reset the chord length on tick so that smaller chords can become active
+    /// after releasing a larger chord.
+    chord_regretion: bool,
+}
+
+impl ClashSettings {
+    pub fn new(strat: ClashStrategy, chord_regretion: bool) -> Self {
+        Self {
+            strat,
+            chord_regretion,
+        }
+    }
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn chord_regretion(&self) -> bool {
+        self.chord_regretion
+    }
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn set_chord_regretion(&mut self, chord_regretion: bool) {
+        self.chord_regretion = chord_regretion;
+    }
+    pub fn with_chord_regretion(mut self, chord_regretion: bool) -> Self {
+        self.chord_regretion = chord_regretion;
+        self
+    }
+    pub fn clash_strategy(&self) -> ClashStrategy {
+        self.strat
+    }
+    pub fn set_clash_strategy(&mut self, strat: ClashStrategy) {
+        self.strat = strat;
+    }
+    pub fn with_clash_strategy(mut self, strat: ClashStrategy) -> Self {
+        self.strat = strat;
+        self
+    }
+}
+
+impl From<ClashStrategy> for ClashSettings {
+    fn from(value: ClashStrategy) -> Self {
+        Self {
+            strat: value,
+            ..Default::default()
+        }
+    }
+}
+
+/// The settings to use for resolving clashing inputs.
+#[derive(Clone, Copy, Debug, Default)]
+pub enum ClashStrategy {
     /// Does not buffer inputs, just detects clashes. Inputs that may clash will be re-checked after all inputs
     /// have had a chance to assert their priority.
     ///
@@ -162,7 +206,7 @@ pub enum ClashSettings {
     Disabled,
 }
 
-impl ClashSettings {
+impl ClashStrategy {
     /// Return new settings that use buffered clash resolution where `delay` is the amount of time to wait before
     /// resolving; if `delay` is `None` input will buffer for 1 frame.
     pub fn new_buffered(delay: Option<Duration>) -> Self {
@@ -172,9 +216,6 @@ impl ClashSettings {
     /// bindings have been checked at least once.
     pub fn new_unbuffered() -> Self {
         Self::Unbuffered
-    }
-    fn buffer_all(&self) -> bool {
-        matches!(self, Self::BufferAll(_))
     }
     pub fn is_disabled(&self) -> bool {
         matches!(self, Self::Disabled)
@@ -284,9 +325,6 @@ pub struct InputHandler {
     frame: usize,
     /// All known bindings and the state of the input.
     clashables: HashMap<BevyInputKind, InputState>,
-    /// reset the chord length on tick so that smaller chords can become active
-    /// after releasing a larger chord.
-    chord_regretion: bool,
 }
 
 impl Default for InputHandler {
@@ -294,7 +332,6 @@ impl Default for InputHandler {
         Self {
             frame: 0,
             clashables: HashMap::default(),
-            chord_regretion: false,
         }
     }
 }
@@ -311,16 +348,6 @@ enum Outy {
 }
 
 impl InputHandler {
-    /// Whether to reset the chord length on tick so that smaller chords can become
-    /// active after releasing a larger chord.
-    pub fn chord_regretion(&self) -> bool {
-        self.chord_regretion
-    }
-    /// Whether to reset the chord length on tick so that smaller chords can become
-    /// active after releasing a larger chord.
-    pub fn set_chord_regretion(&mut self, chord_regretion: bool) {
-        self.chord_regretion = chord_regretion;
-    }
     /// Does some internal cleaning that is only possible between bindings checking for their inputs
     /// because we can assume that all (or none) of the inputs have been given a change to fight for priority.
     ///
@@ -330,32 +357,34 @@ impl InputHandler {
     /// - increases the internal counter for "frames" after all above steps.
     ///
     pub fn tick(&mut self, clash_settings: &ClashSettings) {
-        let cr = self.chord_regretion();
+        let cr = clash_settings.chord_regretion();
         for (_c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
-                if matches!(
-                    state.kind,
-                    InputStateKind::Inactive | InputStateKind::NoClash
-                ) {
+                if matches!(state.kind, InputStateKind::Inactive) {
                     None
                 } else {
                     Some(InputStateKind::inactive())
                 }
-            } else if let ClashSettings::BufferClashing(duration)
-            | ClashSettings::BufferAll(duration) = clash_settings
+            } else if let ClashStrategy::BufferClashing(duration)
+            | ClashStrategy::BufferAll(duration) = clash_settings.clash_strategy()
                 && let InputStateKind::Buffered {
                     start,
                     chord_len,
                     last_chord_len,
-                } = &state.kind
+                    count,
+                } = &mut state.kind
             {
                 if let Some(d) = duration {
-                    if start.elapsed() >= *d {
+                    if start.elapsed() >= d
+                        || (matches!(clash_settings.strat, ClashStrategy::BufferClashing(_))
+                            && *count == 1)
+                    {
                         Some(InputStateKind::Active {
                             chord_len: *chord_len,
                             last_chord_len: *last_chord_len,
                         })
                     } else {
+                        *count = 0;
                         None
                     }
                 } else {
@@ -399,20 +428,12 @@ impl InputHandler {
         // TODO need to provide a way to clean up unused inputs.
         // self.clashables.clear();
         for c in clashables.into_iter() {
-            match self.clashables.entry(c) {
-                Entry::Occupied(mut o) => {
-                    let state = o.get_mut();
-                    if matches!(state.kind, InputStateKind::NoClash) {
-                        state.kind = InputStateKind::Inactive;
-                    }
-                }
-                Entry::Vacant(v) => {
-                    v.insert_entry(InputState {
-                        frame: self.frame,
-                        kind: InputStateKind::default(),
-                        value: InputValue::default(),
-                    });
-                }
+            if let Entry::Vacant(v) = self.clashables.entry(c) {
+                v.insert_entry(InputState {
+                    frame: self.frame,
+                    kind: InputStateKind::default(),
+                    value: InputValue::default(),
+                });
             }
         }
     }
@@ -485,19 +506,12 @@ impl InputHandler {
             let state = self.clashables.get_mut(c).unwrap();
             let new_state = if pressed {
                 match &mut state.kind {
-                    InputStateKind::NoClash => {
-                        if clash_settings.buffer_all() {
-                            Some(InputStateKind::buffered(chord_length))
-                        } else {
-                            None
-                        }
-                    }
-                    InputStateKind::Inactive => match clash_settings {
-                        ClashSettings::Unbuffered => Some(InputStateKind::clashing(chord_length)),
-                        ClashSettings::BufferAll(_) | ClashSettings::BufferClashing(_) => {
+                    InputStateKind::Inactive => match clash_settings.strat {
+                        ClashStrategy::Unbuffered => Some(InputStateKind::clashing(chord_length)),
+                        ClashStrategy::BufferAll(_) | ClashStrategy::BufferClashing(_) => {
                             Some(InputStateKind::buffered(chord_length))
                         }
-                        ClashSettings::Disabled => Some(InputStateKind::active(chord_length)),
+                        ClashStrategy::Disabled => Some(InputStateKind::active(chord_length)),
                     },
                     InputStateKind::Clashing(len) => {
                         if chord_length > *len {
@@ -509,22 +523,19 @@ impl InputHandler {
                     InputStateKind::Buffered {
                         start,
                         chord_len,
-                        last_chord_len,
+                        last_chord_len: _,
+                        count,
                     } => {
+                        *count += 1;
                         if let Some(oldest) = oldest_press
                             && oldest < *start
                         {
                             *start = oldest;
                         }
                         if chord_length > *chord_len {
-                            Some(InputStateKind::Buffered {
-                                start: *start,
-                                chord_len: chord_length,
-                                last_chord_len: *last_chord_len,
-                            })
-                        } else {
-                            None
+                            *chord_len = chord_length;
                         }
+                        None
                     }
                     InputStateKind::Active {
                         chord_len,
@@ -564,11 +575,11 @@ impl InputHandler {
                     last_chord_len: chord_len,
                     ..
                 } => {
-                    if !clash_settings.is_disabled() && *chord_len != chord_length {
+                    if !clash_settings.strat.is_disabled() && *chord_len != chord_length {
                         repoll = Outy::Hide;
                     }
                 }
-                InputStateKind::NoClash | InputStateKind::Inactive => {}
+                InputStateKind::Inactive => {}
             }
         }
 
@@ -599,7 +610,6 @@ impl InputHandler {
                     InputStateKind::Inactive | InputStateKind::Buffered { .. } => {
                         return InputValue::default();
                     }
-                    InputStateKind::NoClash => {}
                     InputStateKind::Clashing(chord_len)
                     | InputStateKind::Active { chord_len, .. } => {
                         if clashable.len() != *chord_len {
@@ -674,7 +684,6 @@ impl InputHandler {
                         for gpad in gamepads {
                             if gpad.pressed(*gamepad_button) {
                                 out |= true;
-                                break;
                             }
                         }
                         InputValue::Pressed(out)
