@@ -158,20 +158,20 @@ fn setup(
     commands
         .spawn((Node::default(), Text::new("Settings:")))
         .with_children(|p| {
-            p.spawn((TextSpan::new("\n  Clash Setting: "),))
+            p.spawn((TextSpan::new("\nF1 Clash Setting: "),))
                 .with_child((
                     TextSpan::new(format!("{:?}", ClashSettings::default())),
                     ClashText,
                 ));
-            p.spawn((TextSpan::new("\n  Combo Progression Setting: "),))
-                .with_child((
-                    TextSpan::new(format!("{:?}", ComboProgressionSettings::default())),
-                    ComboProgressionText,
-                ));
-            p.spawn((TextSpan::new("\n  Combo Interupt Setting: "),))
+            p.spawn((TextSpan::new("\nF2 Combo Interupt Setting: "),))
                 .with_child((
                     TextSpan::new(format!("{:?}", ComboInterputSettings::default())),
                     ComboInteruptText,
+                ));
+            p.spawn((TextSpan::new("\nF3 Combo Progression Setting: "),))
+                .with_child((
+                    TextSpan::new(format!("{:?}", ComboProgressionSettings::default())),
+                    ComboProgressionText,
                 ));
         });
 
