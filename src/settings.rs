@@ -230,6 +230,7 @@ impl Default for ComboSettings {
     }
 }
 
+/// Rules for how to determine if a [`ButtonCombo`](crate::button::ButtonCombo) can and should be reset early.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum ComboInterruptSettings {
     /// Combos don't get cancelled by incorrect inputs.
@@ -244,8 +245,11 @@ pub enum ComboInterruptSettings {
 /// Rules for how to determine if a [`ButtonCombo`](crate::button::ButtonCombo) can progress.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ComboProgressionSettings {
+    /// No progression rules are applied.
     None,
+    /// The previous button must be released before the next button can be pressed.
     PreviousMustBeReleased,
+    /// The next button must be released before the next button can be pressed.
     #[default]
     NextMustBeReleased,
 }
