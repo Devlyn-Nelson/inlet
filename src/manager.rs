@@ -176,6 +176,9 @@ impl ClashSettings {
     fn buffer_all(&self) -> bool {
         matches!(self, Self::BufferAll(_))
     }
+    pub fn is_disabled(&self) -> bool {
+        matches!(self, Self::Disabled)
+    }
 }
 
 /// A Resource that defines default combo settings for entities that don't specify.
@@ -561,7 +564,7 @@ impl InputHandler {
                     last_chord_len: chord_len,
                     ..
                 } => {
-                    if *chord_len != chord_length && matches!(repoll, Outy::Show | Outy::Repoll) {
+                    if !clash_settings.is_disabled() && *chord_len != chord_length {
                         repoll = Outy::Hide;
                     }
                 }

@@ -1,4 +1,3 @@
-- Clash Disabled currently doesn't release to all. Currently acts like Unbuffered without re-poll. This can be seen in visualizer.
 - It seems like the BufferClashable sometimes buffers non-clashing inputs (press F1 in visualizer a couple times, must pass BufferAll setting at least once).
 - Combo progression None doesn't activate combos if the previous buttons are still held.
 
