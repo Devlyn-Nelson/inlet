@@ -72,8 +72,8 @@ impl From<BevyAxisKind> for BevyAxisButton {
     }
 }
 
-fn positive_only(asdf: f32) -> bool {
-    asdf > 0.
+fn positive_only(input: f32) -> bool {
+    input > 0.
 }
 
 /// The type of button like binding. This is a replacement for [`BevyInputKind`] that
@@ -285,7 +285,7 @@ impl ButtonCombo {
         out
     }
     /// Tells the combo that the combo was interupted and should start over.
-    pub fn interupt(&mut self) {
+    pub fn interrupt(&mut self) {
         self.current_index = 0;
     }
 }

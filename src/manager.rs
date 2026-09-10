@@ -130,7 +130,7 @@ impl InputHandler {
     /// - increases the internal counter for "frames" after all above steps.
     ///
     pub fn tick(&mut self, clash_settings: &ClashSettings) {
-        let cr = clash_settings.chord_regretion();
+        let cr = clash_settings.chord_regression();
         for (_c, state) in self.clashables.iter_mut() {
             let new = if state.frame != self.frame {
                 if matches!(state.kind, InputStateKind::Inactive) {
@@ -214,15 +214,15 @@ impl InputHandler {
     }
     /// Used to determine if a combo is broken. Returns `true` if a input that is not in `clashables` is updated this
     /// frame.
-    pub(crate) fn poll_interupt(
+    pub(crate) fn poll_interrupt(
         &mut self,
         clashable: &[BevyInputKind],
-        axis_interupts: bool,
+        axis_interrupts: bool,
     ) -> bool {
         for (binding, state) in self.clashables.iter() {
             if !clashable.contains(binding) {
                 if state.frame == self.frame {
-                    if axis_interupts || state.value.is_button() {
+                    if axis_interrupts || state.value.is_button() {
                         return true;
                     }
                 }

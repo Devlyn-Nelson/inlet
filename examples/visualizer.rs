@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use bevy::{color::palettes::basic, prelude::*};
 use inlet::{
-    ClashSettings, ClashStrategy, ComboInterputSettings, ComboProgressionSettings, ComboSettings,
+    ClashSettings, ClashStrategy, ComboInterruptSettings, ComboProgressionSettings, ComboSettings,
     InputBindingsSimple, InputManagementPluginSimple,
     button::{ActionBinding, ButtonChord, ButtonCombo},
 };
@@ -88,7 +88,7 @@ fn setup(
     commands.spawn((
         Camera2d,
         ClashSettings::from(ClashStrategy::Unbuffered),
-        ComboSettings::default().with_tolerence(COMBO_TOLERANCE),
+        ComboSettings::default().with_tolerance(COMBO_TOLERANCE),
         InputBindingsSimple::<InputTypes>::new()
             .with_action_binding(InputTypes::ToggleClashStrategy, KeyCode::F1.into())
             .with_action_binding(InputTypes::ToggleChordRegression, KeyCode::F2.into())
@@ -174,7 +174,7 @@ fn setup(
                 ));
             p.spawn((TextSpan::new("\nF3 Combo Interupt Setting: "),))
                 .with_child((
-                    TextSpan::new(format!("{:?}", ComboInterputSettings::default())),
+                    TextSpan::new(format!("{:?}", ComboInterruptSettings::default())),
                     ComboInteruptText,
                 ));
             p.spawn((TextSpan::new("\nF4 Combo Progression Setting: "),))
@@ -485,19 +485,19 @@ fn update(
         player.1.set_clash_strategy(new_setting);
     }
     if player.0.just_pressed(&InputTypes::ToggleChordRegression) {
-        let new_setting = !player.1.chord_regretion();
-        player.1.set_chord_regretion(new_setting);
+        let new_setting = !player.1.chord_regression();
+        player.1.set_chord_regression(new_setting);
     }
     if player
         .0
         .just_pressed(&InputTypes::ToggleComboInteruptSetting)
     {
-        let new_setting = match player.2.interupt_settings() {
-            ComboInterputSettings::NoBreak => ComboInterputSettings::AnythingBreaks,
-            ComboInterputSettings::ButtonsBreak => ComboInterputSettings::NoBreak,
-            ComboInterputSettings::AnythingBreaks => ComboInterputSettings::ButtonsBreak,
+        let new_setting = match player.2.interrupt_settings() {
+            ComboInterruptSettings::NoBreak => ComboInterruptSettings::AnythingBreaks,
+            ComboInterruptSettings::ButtonsBreak => ComboInterruptSettings::NoBreak,
+            ComboInterruptSettings::AnythingBreaks => ComboInterruptSettings::ButtonsBreak,
         };
-        player.2.set_interupt_settings(new_setting);
+        player.2.set_interrupt_settings(new_setting);
     }
     if player
         .0
@@ -554,7 +554,7 @@ fn update_text(
     >,
 ) {
     ***clash_strat_text = format!("{:?}", player.0.clash_strategy());
-    ***chord_regression_text = format!("{}", player.0.chord_regretion());
-    ***interupt_text = format!("{:?}", player.1.interupt_settings());
+    ***chord_regression_text = format!("{}", player.0.chord_regression());
+    ***interupt_text = format!("{:?}", player.1.interrupt_settings());
     ***progression_text = format!("{:?}", player.1.progression_settings());
 }

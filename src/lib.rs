@@ -14,23 +14,21 @@
 //!   - [`DualValueBinding`] internally behaves as if it is just 2 `ValueBinding`'s.
 //! - [`ButtonChord`](crate::button::ButtonChord) (multiple buttons at once) with configurable settings for
 //!   resolving clashing inputs.
-//! - [`ButtonCombo`](crate::button::ButtonCombo) (multiple sequentially pressed buttons). Think GTA cheats but
-//!   without incorrect buttons interrupting it.
+//! - [`ButtonCombo`](crate::button::ButtonCombo) (multiple sequentially pressed buttons). Think GTA cheats codes.
 //!
 //! # Usage
 //!
 //! ## Binding Types to be aware of
 //!
-//! - [`BevyInputKind`] which is and enum that is either [`BevyAxisKind`] or [`BevyButtonKind`]. Both inner
+//! - [`BevyInputKind`] an enum that is either [`BevyAxisKind`] or [`BevyButtonKind`]. Both inner
 //!   types just resolve down to types from
 //!   `bevy_input`.
-//! - [`BevyAxisButton`](crate::button::BevyAxisButton) this converts an axis to a button.
-//! - [`ButtonBinding`](crate::button::ButtonBinding) this what `inlet` uses as an actual binding to a button-like
+//! - [`BevyAxisButton`](crate::button::BevyAxisButton) converts an axis to a button.
+//! - [`ButtonBinding`](crate::button::ButtonBinding) a binding to a button-like
 //!   input. uses [`BevyButtonKind`] or [`BevyAxisButton`](crate::button::BevyAxisButton) to detect presses.
 //!   - Can be configured to be a [`ButtonChord`](crate::button::ButtonChord) (multiple buttons that must be pressed all at once).
 //!   - Can be configured to be a [`ButtonCombo`](crate::button::ButtonCombo) (multiple buttons pressed one after another).
-//! - [`AxisBinding`](crate::axis::AxisBinding) this what `inlet` uses as an actual binding to a axis-like input.
-//!
+//! - [`AxisBinding`](crate::axis::AxisBinding) a binding to a axis-like input.
 //!
 //! ## Poll Only
 //!
@@ -73,25 +71,50 @@
 //!
 //! - Add [`InputManagementPlugin<InputTypes, MessageType>::default()`] and your system to your bevy app.
 //!
-//! ## [`ClashSettings`](crate::manager::ClashSettings)
+//! ## Clash Settings
 //!
-//! If you like [`ButtonChords`](crate::button::ButtonChord) and have opinions about how inputs that clash should
-//! behave: you can configure how that happens.
+//! The behavior of clash detection can be configured on a per player bias ([`ClashSettings`]) or globally ([`DefaultClashSettings`]).
 //!
-//! ### [`Resource`](bevy::prelude::Resource)
+//! ### Clash Strategies
 //!
-//! You can spawn  a [`ClashSettings`](crate::manager::ClashSettings) resource (preferably on start up) that
-//! all new [`InputHandler`](crate::manager::InputHandler) will use. The system that updates bindings
-//! will automatically insert [`InputHandler`](crate::manager::InputHandler) on entities that have an
-//! [`InputBindings`] attached to them, acting as a default.
+//! - `Unbuffered` Inputs that can clash will be rechecked after all inputs are checked at least once.
+//! - `BufferClashing` Inputs that can clash will not be reported for the initial frame they become active. Next frame or after provided `Duration` the action with the largest chord that is active will be given the inputs. Note that buttons that can NOT clash with other do NOT get buffered.
+//! - `BufferAll` This will cause ALL inputs to buffer. This exists to make things more consistent.
+//! - `Disabled` No clash prevention.
 //!
-//! ### [`Component`]
+//! ### Component
 //!
-//! When you insert [`ClashSettings`](crate::manager::ClashSettings) as a component on an entity that also
-//! has an attached [`InputBindings`] the settings will update and all current input states will reset. This
-//! means you can allow player to configure this on a per-player basis.
+//! If the [`ClashSettings`] component is present on an entity that has a [`InputBindings`] the attached settings will be used.
 //!
+//! ### Resource
 //!
+//! If an entity does not have a [`ClashSettings`] component attached the [`DefaultClashSettings`] resource will be used, otherwise `ClashSettings::default` will be used.
+//!
+//! ## Combo Settings
+//!
+//! The behavior of combos can be configured on a per player bias ([`ComboSettings`]) or globally ([`DefaultComboSettings`]).
+//!
+//! Maximum duration between combo button presses can be configured as well a Combo Interruption and Combo Progression
+//!
+//! ### Combo Interruption
+//!
+//! - `NoBreak` Don't interrupt on incorrect button press.
+//! - `ButtonsBreak` Interrupt if an incorrect button was pressed.
+//! - `AnythingBreaks` Interrupt if any input change happened.
+//!
+//! ### Combo Progression
+//!
+//! - `None` No Rules for progressing a combo.
+//! - `PreviousMustBeReleased` The combo will not progress unless the previous expected button in not pressed.
+//! - `NextMustBeReleased` The combo will not progress unless the next expected button in not pressed.
+//!
+//! ### Component
+//!
+//! If the [`ComboSettings`] component is present on an entity that has a [`InputBindings`] the attached settings will be used.
+//!
+//! ### Resource
+//!
+//! If an entity does not have a [`ComboSettings`] component attached the [`DefaultComboSettings`] resource will be used, otherwise `ComboSettings::default` will be used.
 pub mod axis;
 pub mod button;
 // pub mod clash;
@@ -328,7 +351,7 @@ impl<T> InputBinding<T> {
     /// # Warning
     ///
     /// This is intended for cases where you know that the binding is a [`Self::DualValue`], but this will still
-    /// set the mock values for inner bindings regardless of if thats true or not.
+    /// set the mock values for inner bindings regardless of if that is true or not.
     pub fn mock_x_value(&mut self, value: f32) {
         match self {
             InputBinding::Action(action_binding) => {
@@ -345,7 +368,7 @@ impl<T> InputBinding<T> {
     /// # Warning
     ///
     /// This is intended for cases where you know that the binding is a [`Self::DualValue`], but this will still
-    /// set the mock values for inner bindings regardless of if thats true or not.
+    /// set the mock values for inner bindings regardless of if that is true or not.
     pub fn mock_y_value(&mut self, value: f32) {
         match self {
             InputBinding::Action(action_binding) => {

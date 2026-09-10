@@ -569,7 +569,7 @@ impl Default for ValueState {
 ///
 /// # Event
 ///
-/// This stores a function that gets called when the internal state is feed a value. The functions thats a `f32`
+/// This stores a function that gets called when the internal state is feed a value. The functions that is a `f32`
 /// value from the axis and returns an [`Option<T>`]. If returned option is `Some` the value will be sent as
 /// a [`Message`](bevy::prelude::Message).
 pub struct ValueBinding<T> {
@@ -833,24 +833,3 @@ impl<T> From<(Vec<AxisBinding>, Vec<AxisBinding>)> for DualValueBinding<T> {
 fn no_event_dual<T>(_: Vec2) -> Option<T> {
     None
 }
-
-// #[derive(Clone)]
-// pub struct DualAxisBindings<T> {
-//     bindings_x: Vec<AxisBinding>,
-//     bindings_y: Vec<AxisBinding>,
-//     event: fn(f32, f32) -> T,
-// }
-// #[derive(Clone)]
-// pub struct TriAxisBindings<T> {
-//     bindings_x: Vec<AxisBinding>,
-//     bindings_y: Vec<AxisBinding>,
-//     bindings_z: Vec<AxisBinding>,
-//     event: fn(f32, f32, f32) -> T,
-// }
-
-// #[derive(Clone)]
-// pub struct AxisBindings<T> {
-//     pub bindings: Vec<ButtonBinding>,
-//     pub event: ButtonEventBinding<T>,
-//     pub state: f32,
-// }

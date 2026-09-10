@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use crate::{
-    BindEvent, ClashSettings, ComboInterputSettings, ComboProgressionSettings, ComboSettings,
+    BindEvent, ClashSettings, ComboInterruptSettings, ComboProgressionSettings, ComboSettings,
     DefaultClashSettings, DefaultComboSettings, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
@@ -167,7 +167,7 @@ pub fn system_gather_button_inputs<K, T>(
                                 .map(|v| button_chord.apply(v)),
                             ButtonBinding::Combo(button_combo) => {
                                 let expected =
-                                    button_combo.expected_binding_mut(combo_settings.tolerence());
+                                    button_combo.expected_binding_mut(combo_settings.tolerance());
                                 // Always defer to repoll for combos so that we can properly detect
                                 // combo breaking hits.
                                 input_handler.poll(&[expected.kind()], clash_settings);
@@ -284,7 +284,7 @@ pub fn system_gather_button_inputs<K, T>(
                                 }
                                 ButtonBinding::Combo(button_combo) => {
                                     let b =
-                                        button_combo.expected_binding(combo_settings.tolerence());
+                                        button_combo.expected_binding(combo_settings.tolerance());
                                     let mut check = Vec::with_capacity(3);
                                     check.push(b.kind());
                                     let out = input_handler.repoll(&check);
@@ -294,16 +294,16 @@ pub fn system_gather_button_inputs<K, T>(
                                     if let Some(next) = button_combo.next_binding() {
                                         check.push(next.kind());
                                     }
-                                    if match combo_settings.interupt_settings() {
-                                        ComboInterputSettings::NoBreak => false,
-                                        ComboInterputSettings::ButtonsBreak => {
-                                            input_handler.poll_interupt(&check, false)
+                                    if match combo_settings.interrupt_settings() {
+                                        ComboInterruptSettings::NoBreak => false,
+                                        ComboInterruptSettings::ButtonsBreak => {
+                                            input_handler.poll_interrupt(&check, false)
                                         }
-                                        ComboInterputSettings::AnythingBreaks => {
-                                            input_handler.poll_interupt(&check, true)
+                                        ComboInterruptSettings::AnythingBreaks => {
+                                            input_handler.poll_interrupt(&check, true)
                                         }
                                     } {
-                                        button_combo.interupt();
+                                        button_combo.interrupt();
                                         false
                                     } else if b.apply(out) {
                                         expected_is_pressed(

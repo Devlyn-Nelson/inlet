@@ -2,15 +2,33 @@ Input to Action Binding library for Bevy Game Engine.
 
 # Features
 
-- Uses bevy_input internally, supports Keyboard, Gamepad, and Mouse.
-- Uses any `InputKey` type for keying input types. 
-- Can produce `Message`'s for common input events.
-- `InputBinding` lets you bind any axis or button to any axis or button like input.
-  - `ActionBinding` has internal states to best represent button like behavior: JustPressed, Pressed, JustReleased, Released. Can also be used as digital (-1, 0, 1) axis.
-  - `ValueBinding` can return a value (-1.0 to 1.0) from any axis or set of buttons. Can have a stack of generic functions that modify the output. Can be used as a button, by default it is assumed any non-zero value is pressed, but modifiers can enable you to control this behavior more finely.
-  - `DualValueBinding` internally behaves as if it is just 2 `ValueBinding`'s.
-- `ButtonChord`s (multiple buttons at once) with configurable settings for resolving clashing inputs.
-- `ButtonCombo`s (multiple sequentially pressed buttons). Think GTA cheats but without incorrect buttons interrupting it.
+- Maps Actions to input bindings
+- Uses `bevy_input` internally, supports Keyboard, Gamepad, and Mouse.
+- Can produce [`Message`] for common input events.
+- [`InputBinding`] lets you bind any axis or button to any axis or button like input.
+  - [`ActionBinding`] has internal states to best represent button like behavior: JustPressed, Pressed,
+    JustReleased, Released. Can also be used as digital (-1, 0, 1) axis.
+  - [`ValueBinding`] can return a value (-1.0 to 1.0) from any axis or set of buttons. Can have a stack
+    of generic functions that modify the output. Can be used as a button, by default it is assumed any non-zero
+    value is pressed, but modifiers can enable you to control this behavior more finely.
+  - [`DualValueBinding`] internally behaves as if it is just 2 `ValueBinding`'s.
+- [`ButtonChord`](crate::button::ButtonChord) (multiple buttons at once) with configurable settings for
+  resolving clashing inputs.
+- [`ButtonCombo`](crate::button::ButtonCombo) (multiple sequentially pressed buttons). Think GTA cheats codes.
+
+# Usage
+
+## Binding Types to be aware of
+
+- [`BevyInputKind`] an enum that is either [`BevyAxisKind`] or [`BevyButtonKind`]. Both inner
+  types just resolve down to types from
+  `bevy_input`.
+- [`BevyAxisButton`](crate::button::BevyAxisButton) converts an axis to a button.
+- [`ButtonBinding`](crate::button::ButtonBinding) a binding to a button-like
+  input. uses [`BevyButtonKind`] or [`BevyAxisButton`](crate::button::BevyAxisButton) to detect presses.
+  - Can be configured to be a [`ButtonChord`](crate::button::ButtonChord) (multiple buttons that must be pressed all at once).
+  - Can be configured to be a [`ButtonCombo`](crate::button::ButtonCombo) (multiple buttons pressed one after another).
+- [`AxisBinding`](crate::axis::AxisBinding) a binding to a axis-like input.
 
 # Usage
 
@@ -24,7 +42,6 @@ Input to Action Binding library for Bevy Game Engine.
   - Can be configured to be a Chord (multiple buttons that must be pressed all at once).
   - Can be configured to be a Combo (multiple buttons pressed one after another).
 - `AxisBinding` this what `inlet` uses as an actual binding to a axis-like input.
-
 
 ## Poll Only
 
@@ -220,14 +237,16 @@ Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system 
 
 The behavior of clash detection can be configured on a per player bias (`ClashSettings`) or globally (`DefaultClashSettings`).
 
-The options are:
+### Clash Strategies
+
 - Unbuffered: Inputs that can clash will be rechecked after all inputs are checked at least once.
-- BufferClashing: Inputs that can clash will not be reported for the inital frame they become active. Next frame or after provided `Duration` the action with the largest chord that is active will be given the inputs. Note that buttons that can NOT clash with other do NOT get buffered.
-- BufferAll: This will cause ALL inputs to buffer. This exists to make things more consistant.
+- BufferClashing: Inputs that can clash will not be reported for the initial frame they become active. Next frame or after provided `Duration` the action with the largest chord that is active will be given the inputs. Note that buttons that can NOT clash with other do NOT get buffered.
+- BufferAll: This will cause ALL inputs to buffer. This exists to make things more consistent.
+- Disabled: No clash prevention.
 
 ### Component
 
-If the `ClashSettings` component is present on an entity that has a `InputBindings` the attached settings will ube used.
+If the `ClashSettings` component is present on an entity that has a `InputBindings` the attached settings will be used.
 
 ### Resource
 
@@ -236,17 +255,23 @@ If an entity does not have a `ClashSettings` component attached the `DefaultClas
 ## Combo Settings
 
 The behavior of combos can be configured on a per player bias (`ComboSettings`) or globally (`DefaultComboSettings`).
+Maximum duration between combo button presses can be configured as well a Combo Interruption and Combo Progression
 
-Logic of interupting combos:
-- Don't interupt on incorrect button press.
-- Interupt if an incorrect button was pressed.
-- Interupt if any input change happened.
+### Combo Interruption
 
-Maximum duration between combo button presses can also be configured
+- `NoBreak` Don't interrupt on incorrect button press.
+- `ButtonsBreak` Interrupt if an incorrect button was pressed.
+- `AnythingBreaks` Interrupt if any input change happened.
+
+### Combo Progression
+
+- `None` No Rules for progressing a combo.
+- `PreviousMustBeReleased` The combo will not progress unless the previous expected button in not pressed.
+- `NextMustBeReleased` The combo will not progress unless the next expected button in not pressed.
 
 ### Component
 
-If the `ComboSettings` component is present on an entity that has a `InputBindings` the attached settings will ube used.
+If the `ComboSettings` component is present on an entity that has a `InputBindings` the attached settings will be used.
 
 ### Resource
 

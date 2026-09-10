@@ -5,7 +5,8 @@ use std::{
 
 use bevy::ecs::{component::Component, resource::Resource};
 
-/// A Resource that defines default clash settings for newly created [`InputManagers`].
+/// A Resource that defines default [`ClashSettings`] [`InputHandlers`](crate::manager::InputHandler) that
+/// don't define their own.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct DefaultClashSettings(pub ClashSettings);
 
@@ -27,41 +28,46 @@ impl DerefMut for DefaultClashSettings {
 /// attach to an entity to override global clash settings.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct ClashSettings {
-    strat: ClashStrategy,
-    /// reset the chord length on tick so that smaller chords can become active
+    strategy: ClashStrategy,
+    /// Reset the chord length on tick so that smaller chords can become active
     /// after releasing a larger chord.
-    chord_regretion: bool,
+    chord_regression: bool,
 }
 
 impl ClashSettings {
-    pub fn new(strat: ClashStrategy, chord_regretion: bool) -> Self {
+    pub fn new(strategy: ClashStrategy, chord_regression: bool) -> Self {
         Self {
-            strat,
-            chord_regretion,
+            strategy,
+            chord_regression,
         }
     }
     /// Whether to reset the chord length on tick so that smaller chords can become
     /// active after releasing a larger chord.
-    pub fn chord_regretion(&self) -> bool {
-        self.chord_regretion
+    pub fn chord_regression(&self) -> bool {
+        self.chord_regression
     }
     /// Whether to reset the chord length on tick so that smaller chords can become
     /// active after releasing a larger chord.
-    pub fn set_chord_regretion(&mut self, chord_regretion: bool) {
-        self.chord_regretion = chord_regretion;
+    pub fn set_chord_regression(&mut self, chord_regression: bool) {
+        self.chord_regression = chord_regression;
     }
-    pub fn with_chord_regretion(mut self, chord_regretion: bool) -> Self {
-        self.chord_regretion = chord_regretion;
+    /// Whether to reset the chord length on tick so that smaller chords can become
+    /// active after releasing a larger chord.
+    pub fn with_chord_regression(mut self, chord_regression: bool) -> Self {
+        self.chord_regression = chord_regression;
         self
     }
+    /// Returns the current [`ClashStrategy`].
     pub fn clash_strategy(&self) -> ClashStrategy {
-        self.strat
+        self.strategy
     }
-    pub fn set_clash_strategy(&mut self, strat: ClashStrategy) {
-        self.strat = strat;
+    /// Sets the [`ClashStrategy`].
+    pub fn set_clash_strategy(&mut self, strategy: ClashStrategy) {
+        self.strategy = strategy;
     }
-    pub fn with_clash_strategy(mut self, strat: ClashStrategy) -> Self {
-        self.strat = strat;
+    /// Sets the [`ClashStrategy`].
+    pub fn with_clash_strategy(mut self, strategy: ClashStrategy) -> Self {
+        self.strategy = strategy;
         self
     }
 }
@@ -69,7 +75,7 @@ impl ClashSettings {
 impl From<ClashStrategy> for ClashSettings {
     fn from(value: ClashStrategy) -> Self {
         Self {
-            strat: value,
+            strategy: value,
             ..Default::default()
         }
     }
@@ -114,7 +120,7 @@ pub enum ClashStrategy {
     ///   binding can see it again.
     /// - If a chord has multiple buffered inputs, all inputs start times will be set the the oldest.
     BufferAll(Option<Duration>),
-    /// Disables Clash Detection. All presses will become active immediatly.
+    /// Disables Clash Detection. All presses will become active immediately.
     Disabled,
 }
 
@@ -124,7 +130,7 @@ impl ClashStrategy {
     pub fn new_buffered(delay: Option<Duration>) -> Self {
         Self::BufferClashing(delay)
     }
-    /// Returns new settings that use unbuffered clash resolution where inputs that might clash re-check after all
+    /// Returns new settings that use un-buffered clash resolution where inputs that might clash re-check after all
     /// bindings have been checked at least once.
     pub fn new_unbuffered() -> Self {
         Self::Unbuffered
@@ -134,7 +140,8 @@ impl ClashStrategy {
     }
 }
 
-/// A Resource that defines default combo settings for entities that don't specify.
+/// A Resource that defines default [`ComboSettings`] [`InputHandlers`](crate::manager::InputHandler) that
+/// don't define their own.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct DefaultComboSettings(pub ComboSettings);
 
@@ -152,38 +159,51 @@ impl DerefMut for DefaultComboSettings {
     }
 }
 
+/// Settings pertaining to [`ButtonCombos`](crate::button::ButtonCombo).
+///
+/// ## Interrupt
+///
+/// see [`ComboInterruptSettings`]
+///
+/// ## Progression
+///
+/// see [`ComboProgressionSettings`]
+///
+/// ## Tolerance
+///
+/// The maximum allowed time between button presses before the combo resets to expecting the first button in the combo.
 #[derive(Debug, Component, Clone, Copy)]
 pub struct ComboSettings {
-    interupt: ComboInterputSettings,
-    tolerence: Duration,
+    interrupt: ComboInterruptSettings,
+    tolerance: Duration,
     progression: ComboProgressionSettings,
 }
 
 impl ComboSettings {
-    pub fn interupt_settings(&self) -> &ComboInterputSettings {
-        &self.interupt
+    pub fn interrupt_settings(&self) -> &ComboInterruptSettings {
+        &self.interrupt
     }
 
-    pub fn with_interupt_settings(mut self, settings: ComboInterputSettings) -> Self {
-        self.interupt = settings;
+    pub fn with_interrupt_settings(mut self, settings: ComboInterruptSettings) -> Self {
+        self.interrupt = settings;
         self
     }
 
-    pub fn set_interupt_settings(&mut self, settings: ComboInterputSettings) {
-        self.interupt = settings;
+    pub fn set_interrupt_settings(&mut self, settings: ComboInterruptSettings) {
+        self.interrupt = settings;
     }
 
-    pub fn tolerence(&self) -> &Duration {
-        &self.tolerence
+    pub fn tolerance(&self) -> &Duration {
+        &self.tolerance
     }
 
-    pub fn with_tolerence(mut self, settings: Duration) -> Self {
-        self.tolerence = settings;
+    pub fn with_tolerance(mut self, settings: Duration) -> Self {
+        self.tolerance = settings;
         self
     }
 
-    pub fn set_tolerence(&mut self, settings: Duration) {
-        self.tolerence = settings;
+    pub fn set_tolerance(&mut self, settings: Duration) {
+        self.tolerance = settings;
     }
 
     pub fn progression_settings(&self) -> &ComboProgressionSettings {
@@ -203,15 +223,15 @@ impl ComboSettings {
 impl Default for ComboSettings {
     fn default() -> Self {
         Self {
-            interupt: ComboInterputSettings::default(),
-            tolerence: Duration::from_millis(250),
+            interrupt: ComboInterruptSettings::default(),
+            tolerance: Duration::from_millis(250),
             progression: ComboProgressionSettings::default(),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub enum ComboInterputSettings {
+pub enum ComboInterruptSettings {
     /// Combos don't get cancelled by incorrect inputs.
     NoBreak,
     /// Combos will cancel if a button that isn't the expected button is pressed.
@@ -221,7 +241,7 @@ pub enum ComboInterputSettings {
     AnythingBreaks,
 }
 
-/// Rules for how to determine if a [`ButtonCombo`] can progress.
+/// Rules for how to determine if a [`ButtonCombo`](crate::button::ButtonCombo) can progress.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ComboProgressionSettings {
     None,
