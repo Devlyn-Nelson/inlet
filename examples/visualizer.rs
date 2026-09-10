@@ -2,12 +2,9 @@ use std::time::Duration;
 
 use bevy::{color::palettes::basic, prelude::*};
 use inlet::{
+    ClashSettings, ClashStrategy, ComboInterputSettings, ComboProgressionSettings, ComboSettings,
     InputBindingsSimple, InputManagementPluginSimple,
     button::{ActionBinding, ButtonChord, ButtonCombo},
-    manager::{
-        ClashSettings, ClashStrategy, ComboInterputSettings, ComboProgressionSettings,
-        ComboSettings,
-    },
 };
 
 const BUFFER_TIME: Duration = Duration::from_millis(500);

@@ -97,12 +97,14 @@ pub mod button;
 // pub mod clash;
 pub mod manager;
 mod plugins;
+mod settings;
 mod systems;
 
 use std::hash::Hash;
 
 use button::ActionBinding;
 pub use plugins::{InputManagementPlugin, InputManagementPluginSimple};
+pub use settings::*;
 
 use bevy::{
     input::{

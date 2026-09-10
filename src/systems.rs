@@ -10,13 +10,11 @@ use bevy::{
 };
 
 use crate::{
-    BindEvent, InputBindings, InputValue,
+    BindEvent, ClashSettings, ComboInterputSettings, ComboProgressionSettings, ComboSettings,
+    DefaultClashSettings, DefaultComboSettings, InputBindings, InputValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
-    manager::{
-        ClashSettings, ComboInterputSettings, ComboSettings, DefaultClashSettings,
-        DefaultComboSettings, DisableInputManager, InputHandler,
-    },
+    manager::{DisableInputManager, InputHandler},
     plugins::InputKey,
     pressed_to_value,
 };
@@ -32,8 +30,8 @@ fn expected_is_pressed(
     combo_settings: &ComboSettings,
 ) -> InputValue {
     match combo_settings.progression_settings() {
-        crate::manager::ComboProgressionSettings::None => button_combo.hit().into(),
-        crate::manager::ComboProgressionSettings::PreviousMustBeReleased => {
+        ComboProgressionSettings::None => button_combo.hit().into(),
+        ComboProgressionSettings::PreviousMustBeReleased => {
             let prev = button_combo.previous_binding();
             // If a previous button exist check that it is released.
             if let Some(p) = prev {
@@ -51,7 +49,7 @@ fn expected_is_pressed(
                 button_combo.hit().into()
             }
         }
-        crate::manager::ComboProgressionSettings::NextMustBeReleased => {
+        ComboProgressionSettings::NextMustBeReleased => {
             let next = button_combo.next_binding();
             // If a next button exist check that it is released.
             if let Some(p) = next {
