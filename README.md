@@ -102,7 +102,7 @@ See [chord/clash Settings](#clash-settings) and [Combo Settings](#combo-settings
 | Trigger column 3                 | D     |
 | Trigger column 4                 | F     |
 | Toggle Clash Setting             | F1    |
-| Toggle Chord Regrestion          | F2    |
+| Toggle Chord Regression          | F2    |
 | Toggle Combo Interupt Setting    | F3    |
 | Toggle Combo Progression Setting | F4    |
 
