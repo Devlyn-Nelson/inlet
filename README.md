@@ -37,13 +37,100 @@ Input to Action Binding library for Bevy Game Engine.
 ## Binding Types to be aware of
 
 - `BevyInputKind` which is and enum that is either `BevyAxisKind` or `BevyButtonKind`. Both inner types just resolve down to types from `bevy_input`.
-- `BevyAxisButton` this converts an axis to a button. 
-- `ButtonBinding` this what `inlet` uses as an actual binding to a button-like input. uses `BevyButtonKind` and `BevyAxisButton` to detect presses. 
+- `BevyAxisButton` this converts an axis to a button.
+- `ButtonBinding` this what `inlet` uses as an actual binding to a button-like input. uses `BevyButtonKind` and `BevyAxisButton` to detect presses.
   - Can be configured to be a Chord (multiple buttons that must be pressed all at once).
   - Can be configured to be a Combo (multiple buttons pressed one after another).
 - `AxisBinding` this what `inlet` uses as an actual binding to a axis-like input.
 
-## Poll Only
+## Clash Settings
+
+The behavior of clash detection can be configured on a per player bias (`ClashSettings`) or globally (`DefaultClashSettings`).
+
+### Clash Strategies
+
+- Unbuffered: Inputs that can clash will be rechecked after all inputs are checked at least once.
+- BufferClashing: Inputs that can clash will not be reported for the initial frame they become active. Next frame or after provided `Duration` the action with the largest chord that is active will be given the inputs. Note that buttons that can NOT clash with other do NOT get buffered.
+- BufferAll: This will cause ALL inputs to buffer. This exists to make things more consistent.
+- Disabled: No clash prevention.
+
+### Chord Regression
+
+This enables the ability for chords of smaller lengths to become active after a longer chord was already active.
+
+### Component
+
+If the `ClashSettings` component is present on an entity that has a `InputBindings` the attached settings will be used.
+
+### Resource
+
+If an entity does not have a `ClashSettings` component attached the `DefaultClashSettings` resource will be used, otherwise `ClashSettings::default` will be used.
+
+## Combo Settings
+
+The behavior of combos can be configured on a per player bias (`ComboSettings`) or globally (`DefaultComboSettings`).
+Maximum duration between combo button presses can be configured as well a Combo Interruption and Combo Progression
+
+### Combo Interruption
+
+- `NoBreak` Don't interrupt on incorrect button press.
+- `ButtonsBreak` Interrupt if an incorrect button was pressed.
+- `AnythingBreaks` Interrupt if any input change happened.
+
+### Combo Progression
+
+- `None` No Rules for progressing a combo.
+- `PreviousMustBeReleased` The combo will not progress unless the previous expected button in not pressed.
+- `NextMustBeReleased` The combo will not progress unless the next expected button in not pressed.
+
+### Component
+
+If the `ComboSettings` component is present on an entity that has a `InputBindings` the attached settings will be used.
+
+### Resource
+
+If an entity does not have a `ComboSettings` component attached the `DefaultComboSettings` resource will be used, otherwise `ComboSettings::default` will be used.
+
+# Examples
+
+## `visualizer`
+
+There are 4 Columns, 1 for each input button (A, S, D, F).
+
+There are 3 Rows:
+
+- The top row is for chords (inputs that are held together). Each column in for chord requires all inputs to the left to be pressed before the chord can be triggered.
+- The middle row is for individual buttons.
+- The bottom row is for combos. Like the top row, each column requires all inputs to the left, but instead of holding them all at the same time you must press them one after the other in order.
+
+See [chord/clash Settings](#clash-settings) and [Combo Settings](#combo-settings) for the explanations for the toggle settings.
+
+#### Controls
+
+| Action                           | Input |
+| -------------------------------- | ----- |
+| Trigger column 1                 | A     |
+| Trigger column 2                 | S     |
+| Trigger column 3                 | D     |
+| Trigger column 4                 | F     |
+| Toggle Clash Setting             | F1    |
+| Toggle Chord Regrestion          | F2    |
+| Toggle Combo Interupt Setting    | F3    |
+| Toggle Combo Progression Setting | F4    |
+
+## `events` and `poll-only`
+
+| Action      | Input                            |
+| ----------- | -------------------------------- |
+| Move        | WASD                             |
+| Jump        | Space                            |
+| Zoom Camera | Mouse Scroll Wheel               |
+| Grow        | W->S->D->A (One after the other) |
+| Shrink      | W+A+S+D (All at once)            |
+
+## Code Explanations
+
+#### Poll Only
 
 Create a list of input bindings to be used as a key to register bindings and retrieve values.
 
@@ -123,7 +210,7 @@ Add `SimpleInputManagementPlugin<InputTypes>::default()` and your system to your
 
 > `SimpleInputManagementPlugin` is just a type definition that fills in the message type with a placeholder type for when you don't want to deal with both generic types required for `InputManagementPlugin`.
 
-## Message Based
+#### Message Based
 
 Create a list of input bindings to be used as a key to register bindings and retrieve values.
 
@@ -232,47 +319,3 @@ fn accept_events(
 ```
 
 Add `InputManagementPlugin<InputTypes, MessageType>::default()` and your system to your bevy app.
-
-## Clash Settings
-
-The behavior of clash detection can be configured on a per player bias (`ClashSettings`) or globally (`DefaultClashSettings`).
-
-### Clash Strategies
-
-- Unbuffered: Inputs that can clash will be rechecked after all inputs are checked at least once.
-- BufferClashing: Inputs that can clash will not be reported for the initial frame they become active. Next frame or after provided `Duration` the action with the largest chord that is active will be given the inputs. Note that buttons that can NOT clash with other do NOT get buffered.
-- BufferAll: This will cause ALL inputs to buffer. This exists to make things more consistent.
-- Disabled: No clash prevention.
-
-### Component
-
-If the `ClashSettings` component is present on an entity that has a `InputBindings` the attached settings will be used.
-
-### Resource
-
-If an entity does not have a `ClashSettings` component attached the `DefaultClashSettings` resource will be used, otherwise `ClashSettings::default` will be used.
-
-## Combo Settings
-
-The behavior of combos can be configured on a per player bias (`ComboSettings`) or globally (`DefaultComboSettings`).
-Maximum duration between combo button presses can be configured as well a Combo Interruption and Combo Progression
-
-### Combo Interruption
-
-- `NoBreak` Don't interrupt on incorrect button press.
-- `ButtonsBreak` Interrupt if an incorrect button was pressed.
-- `AnythingBreaks` Interrupt if any input change happened.
-
-### Combo Progression
-
-- `None` No Rules for progressing a combo.
-- `PreviousMustBeReleased` The combo will not progress unless the previous expected button in not pressed.
-- `NextMustBeReleased` The combo will not progress unless the next expected button in not pressed.
-
-### Component
-
-If the `ComboSettings` component is present on an entity that has a `InputBindings` the attached settings will be used.
-
-### Resource
-
-If an entity does not have a `ComboSettings` component attached the `DefaultComboSettings` resource will be used, otherwise `ComboSettings::default` will be used.
