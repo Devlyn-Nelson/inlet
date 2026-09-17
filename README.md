@@ -91,6 +91,8 @@ There are 3 Rows:
 
 See [chord/clash Settings](#clash-settings) and [Combo Settings](#combo-settings) for the explanations for the toggle settings.
 
+> Be aware that the time for buffered inputs is set really high (half a second) so if you toggle the clash settings to `BufferAll` no button, including the toggle buttons, will become active unless held for a the full half second.
+
 #### Controls
 
 | Action                           | Input |
