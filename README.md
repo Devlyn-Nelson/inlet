@@ -4,17 +4,17 @@ Input to Action Binding library for Bevy Game Engine.
 
 - Maps Actions to input bindings
 - Uses `bevy_input` internally, supports Keyboard, Gamepad, and Mouse.
-- Can produce [`Message`] for common input events.
-- [`InputBinding`] lets you bind any axis or button to any axis or button like input.
-  - [`ActionBinding`] has internal states to best represent button like behavior: JustPressed, Pressed,
+- Can produce `Message` for common input events.
+- `InputBinding` lets you bind any axis or button to any axis or button like input.
+  - `ActionBinding` has internal states to best represent button like behavior: JustPressed, Pressed,
     JustReleased, Released. Can also be used as digital (-1, 0, 1) axis.
-  - [`ValueBinding`] can return a value (-1.0 to 1.0) from any axis or set of buttons. Can have a stack
+  - `ValueBinding` can return a value (-1.0 to 1.0) from any axis or set of buttons. Can have a stack
     of generic functions that modify the output. Can be used as a button, by default it is assumed any non-zero
     value is pressed, but modifiers can enable you to control this behavior more finely.
-  - [`DualValueBinding`] internally behaves as if it is just 2 `ValueBinding`'s.
-- [`ButtonChord`](crate::button::ButtonChord) (multiple buttons at once) with configurable settings for
+  - `DualValueBinding` internally behaves as if it is just 2 `ValueBinding`'s.
+- `ButtonChord` (multiple buttons at once) with configurable settings for
   resolving clashing inputs.
-- [`ButtonCombo`](crate::button::ButtonCombo) (multiple sequentially pressed buttons). Think GTA cheats codes.
+- `ButtonCombo` (multiple sequentially pressed buttons). Think GTA cheats codes.
 
 # Usage
 
@@ -85,7 +85,7 @@ There are 4 Columns, 1 for each input button (A, S, D, F).
 
 There are 3 Rows:
 
-- The top row is for chords (inputs that are held together). Each column in for chord requires all inputs to the left to be pressed before the chord can be triggered.
+- The top row is for chords (inputs that are held together). Each column represents a chord that requires that column's input and all inputs to the left to be pressed before the chord can be triggered.
 - The middle row is for individual buttons.
 - The bottom row is for combos. Like the top row, each column requires all inputs to the left, but instead of holding them all at the same time you must press them one after the other in order.
 
