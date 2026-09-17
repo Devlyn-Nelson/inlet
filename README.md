@@ -18,20 +18,6 @@ Input to Action Binding library for Bevy Game Engine.
 
 # Usage
 
-## Binding Types to be aware of
-
-- [`BevyInputKind`] an enum that is either [`BevyAxisKind`] or [`BevyButtonKind`]. Both inner
-  types just resolve down to types from
-  `bevy_input`.
-- [`BevyAxisButton`](crate::button::BevyAxisButton) converts an axis to a button.
-- [`ButtonBinding`](crate::button::ButtonBinding) a binding to a button-like
-  input. uses [`BevyButtonKind`] or [`BevyAxisButton`](crate::button::BevyAxisButton) to detect presses.
-  - Can be configured to be a [`ButtonChord`](crate::button::ButtonChord) (multiple buttons that must be pressed all at once).
-  - Can be configured to be a [`ButtonCombo`](crate::button::ButtonCombo) (multiple buttons pressed one after another).
-- [`AxisBinding`](crate::axis::AxisBinding) a binding to a axis-like input.
-
-# Usage
-
 > see `examples/events.rs` to see most of what can be done.
 
 ## Binding Types to be aware of
