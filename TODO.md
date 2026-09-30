@@ -1,2 +1,1 @@
 - Combo progression None doesn't activate combos if the previous buttons are still held.
-- I am thinking about merging event and key enums to make it less confusing, this would still work and you just use the fact that event triggers have a none type.

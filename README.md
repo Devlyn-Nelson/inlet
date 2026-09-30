@@ -118,11 +118,11 @@ See [chord/clash Settings](#clash-settings) and [Combo Settings](#combo-settings
 
 ## Code Explanations
 
-#### Poll Only
+#### Simple (example)
 
 Create a list of input bindings to be used as a key to register bindings and retrieve values.
 
-This type MUST implement `Hash + Clone + Eq`
+This type MUST implement `Hash + PartialEq + Eq`
 
 ```
 #[derive(Hash, PartialEq, Eq, Clone)]
@@ -130,23 +130,27 @@ enum InputTypes {
     Move,
     Zoom,
     Jump,
+    SecretAbility1,
+    SecretAbility2,
 }
 ```
 
 Create a Bindings component and add it to your entity.
 
-> `SimpleInputBindings` is just a type definition that fills in the message type with a placeholder for when you don't want to deal with both generic types required for `InputBindings`.
-
 ```
-SimpleInputBindings::<InputTypes>::new()
+InputBindings::<InputTypes>::new()
+    // register a jump binding that triggers when either the space key or south on a gamepad is pressed.
     .with_action_binding(
         InputTypes::Jump,
         vec![KeyCode::Space.into(), GamepadButton::South.into()].into(),
     )
+    // TODO added gamepad triggers as option for zoom.
+    // register a zoom binding that reads values from the scroll wheel.
     .with_value_binding(
         InputTypes::Zoom,
         AxisBinding::mouse_y_scroll().invert().into(),
     )
+    // register a move binding that gets the average non-zero value from the wasd on keyboard, the gamepads left stick and dpad.
     .with_dual_value_binding(
         InputTypes::Move,
         (
@@ -162,84 +166,10 @@ SimpleInputBindings::<InputTypes>::new()
             ],
         )
             .into(),
-    );
-```
-
-Make a system that uses the values from bindings
-
-```
-fn control_player(
-    time: Res<Time>,
-    mut player: Single<(&mut Transform, &SimpleInputBindings<InputTypes>)>,
-    mut camera: Single<
-        &mut Transform,
-        (With<Camera3d>, Without<SimpleInputBindings<InputTypes>>),
-    >,
-) {
-    let delta_time = time.delta_secs();
-    let mover = player.1.get_dual_value(&InputTypes::Move);
-    let y_scale = player.0.scale.y * 0.5;
-    let mover = Vec3::new(
-        mover.x,
-        if player.1.get_action_state(&InputTypes::Jump).just_pressed() {
-            10.0 * y_scale
-        } else {
-            0.0
-        },
-        mover.y,
-    );
-    player.0.translation += mover * delta_time;
-    let zoom = 1.0 + (player.1.get_value(&InputTypes::Zoom) * delta_time);
-    camera.translation *= zoom;
-}
-```
-
-Add `SimpleInputManagementPlugin<InputTypes>::default()` and your system to your bevy app.
-
-> `SimpleInputManagementPlugin` is just a type definition that fills in the message type with a placeholder type for when you don't want to deal with both generic types required for `InputManagementPlugin`.
-
-#### Message Based
-
-Create a list of input bindings to be used as a key to register bindings and retrieve values.
-
-This type MUST implement `Hash + PartialEq + Eq`
-
-Also create a type that implements `Message`
-
-> You can make only 1 type that gets used for both if you want. This example separates them
-> simply to show they can be separate types for cases where you are mixing Message-Based and
-> Polling-Based bindings.
-
-```
-#[derive(Hash, PartialEq, Eq, Clone)]
-enum InputTypes {
-    Grow,
-    Shrink,
-}
-
-#[derive(Message)]
-enum MessageType {
-    Grow,
-    Shrink,
-}
-
-// These functions are for giving to the bindings to create the messages.
-impl MessageType {
-    pub fn grow() -> Self {
-        Self::Grow
-    }
-    pub fn shrink() -> Self {
-        Self::Shrink
-    }
-}
-```
-
-Create a Bindings component and add it to your entity.
-
-```
-InputBindings::<InputTypes, MessageType>::new()
+    )
+    // register a cheat code binding activated by pressing forward ->
     .with_action_binding(
-        InputTypes::Grow,
+        InputTypes::SecretAbility1,
         (
             vec![
                 // W -> S -> D -> A
@@ -258,13 +188,24 @@ InputBindings::<InputTypes, MessageType>::new()
                     GamepadButton::DPadLeft.into(),
                 ])
                 .into(),
+                ButtonChord::new(vec![
+                    BevyAxisButton::new_positive_only(GamepadAxis::LeftStickY.into())
+                        .into(),
+                    BevyAxisButton::new_negative_only(GamepadAxis::LeftStickY.into())
+                        .into(),
+                    BevyAxisButton::new_positive_only(GamepadAxis::LeftStickX.into())
+                        .into(),
+                    BevyAxisButton::new_negative_only(GamepadAxis::LeftStickX.into())
+                        .into(),
+                ])
+                .into(),
             ],
-            ButtonEventBinding::WhenPressed(MessageType::grow),
+            ButtonEventBinding::WhenPressed,
         )
             .into(),
     )
     .with_action_binding(
-        InputTypes::Shrink,
+        InputTypes::SecretAbility2,
         (
             vec![
                 ButtonChord::new(vec![
@@ -282,25 +223,51 @@ InputBindings::<InputTypes, MessageType>::new()
                 ])
                 .into(),
             ],
-            ButtonEventBinding::WhenPressed(MessageType::shrink),
+            ButtonEventBinding::WhenPressed,
         )
             .into(),
-    );
+    )
 ```
 
-Make a system that uses the values from bindings
+Make a system or systems that use the values from bindings
 
 > you can also use polling in this system or other systems if you would like.
 
 ```
-fn accept_events(
-    mut messages: MessageReader<MessageType>,
-    mut player: Single<&mut Transform, With<InputBindings<InputTypes, MessageType>>>,
+fn control_player(
+    time: Res<Time>,
+    mut player: Single<(&mut Transform, &InputBindings<InputTypes>)>,
+    mut camera: Single<&mut Transform, (With<Camera3d>, Without<InputBindings<InputTypes>>)>,
 ) {
-    for message in messages.read() {
-        match cheat {
-            MessageType::Grow => player.scale += 1.,
-            MessageType::Shrink => player.scale -= 1.,
+    let delta_time = time.delta_secs();
+    let mover = player.1.get_dual_value(&InputTypes::Move);
+    let y_scale = player.0.scale.y * 0.5;
+    let mover = Vec3::new(
+        // we are inverting x to make the movement in the demo feel more intuitive.
+        // mostly because we are directly applying the input values to the translation
+        // instead of doing math to make it move the way you might expect.
+        -mover.x,
+        if player.1.get_action_state(&InputTypes::Jump).just_pressed() {
+            10.0 * y_scale
+        } else {
+            0.0
+        },
+        mover.y,
+    );
+    player.0.translation += mover * delta_time;
+    let zoom = 1.0 + (player.1.get_value(&InputTypes::Zoom) * delta_time);
+    camera.translation *= zoom;
+}
+
+fn accept_events(
+    mut cheats: MessageReader<InletEvent<InputTypes>>,
+    mut player: Single<&mut Transform, With<InputBindings<InputTypes>>>,
+) {
+    for cheat in cheats.read() {
+        match cheat.kind {
+            InputTypes::SecretAbility1 => player.scale += 1.,
+            InputTypes::SecretAbility2 => player.scale -= 1.,
+            _ => {}
         }
     }
 }
