@@ -572,15 +572,15 @@ impl Default for ValueState {
 /// This stores a function that gets called when the internal state is feed a value. The functions that is a `f32`
 /// value from the axis and returns an [`Option<T>`]. If returned option is `Some` the value will be sent as
 /// a [`Message`](bevy::prelude::Message).
-pub struct ValueBinding<T> {
+pub struct ValueBinding {
     pub(crate) bindings: Vec<AxisBinding>,
     pub(crate) mod_stack: Vec<AxisModifier>,
-    pub(crate) event: fn(f32) -> Option<T>,
+    pub(crate) event_trigger: fn(f32) -> bool,
     pub(crate) state: ValueState,
     pub(crate) mock: Option<f32>,
 }
 
-impl<T> ValueBinding<T> {
+impl ValueBinding {
     /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
@@ -612,19 +612,23 @@ impl<T> ValueBinding<T> {
     /// Feeds the internal state a new value.
     ///
     /// This is what the `inlet` system calls to update the state of a binding. You shouldn't need to call this.
-    pub fn feed(&mut self, value: f32) -> Option<T> {
+    pub fn feed(&mut self, value: f32) -> Option<Duration> {
         self.state.feed(value);
-        (self.event)(self.value())
+        if (self.event_trigger)(self.value()) {
+            Some(self.state.last_transition.elapsed())
+        } else {
+            None
+        }
     }
     pub fn from_parts(
         bindings: Vec<AxisBinding>,
         mod_stack: Vec<AxisModifier>,
-        event: fn(f32) -> Option<T>,
+        event_trigger: fn(f32) -> bool,
     ) -> Self {
         Self {
             bindings,
             mod_stack,
-            event,
+            event_trigger,
             state: ValueState::default(),
             mock: None,
         }
@@ -633,7 +637,7 @@ impl<T> ValueBinding<T> {
         Self {
             bindings,
             mod_stack: vec![],
-            event: no_event,
+            event_trigger: no_event,
             state: ValueState::default(),
             mock: None,
         }
@@ -642,13 +646,13 @@ impl<T> ValueBinding<T> {
         Self {
             bindings: vec![binding],
             mod_stack: vec![],
-            event: no_event,
+            event_trigger: no_event,
             state: ValueState::default(),
             mock: None,
         }
     }
-    pub fn with_event(mut self, event: fn(f32) -> Option<T>) -> Self {
-        self.event = event;
+    pub fn with_event(mut self, event_trigger: fn(f32) -> bool) -> Self {
+        self.event_trigger = event_trigger;
         self
     }
     pub fn with_modifier(mut self, modifier: AxisModifier) -> Self {
@@ -663,52 +667,52 @@ impl<T> ValueBinding<T> {
     }
 }
 
-impl<T> From<GamepadAxis> for ValueBinding<T> {
+impl From<GamepadAxis> for ValueBinding {
     fn from(value: GamepadAxis) -> Self {
         Self::from_binding(value.into())
     }
 }
 
-impl<T> From<GamepadButton> for ValueBinding<T> {
+impl From<GamepadButton> for ValueBinding {
     fn from(value: GamepadButton) -> Self {
         Self::from_binding(value.into())
     }
 }
 
-impl<T> From<MouseAxis> for ValueBinding<T> {
+impl From<MouseAxis> for ValueBinding {
     fn from(value: MouseAxis) -> Self {
         Self::from_binding(value.into())
     }
 }
 
-impl<T> From<AxisBinding> for ValueBinding<T> {
+impl From<AxisBinding> for ValueBinding {
     fn from(value: AxisBinding) -> Self {
         Self::from_binding(value)
     }
 }
 
-impl<T> From<Vec<AxisBinding>> for ValueBinding<T> {
+impl From<Vec<AxisBinding>> for ValueBinding {
     fn from(value: Vec<AxisBinding>) -> Self {
         Self::from_bindings(value)
     }
 }
 
-fn no_event<T>(_: f32) -> Option<T> {
-    None
+fn no_event(_: f32) -> bool {
+    false
 }
 
-pub struct DualValueBinding<T> {
+pub struct DualValueBinding {
     pub(crate) x_bindings: Vec<AxisBinding>,
     pub(crate) x_mod_stack: Vec<AxisModifier>,
     pub(crate) y_bindings: Vec<AxisBinding>,
     pub(crate) y_mod_stack: Vec<AxisModifier>,
-    pub(crate) event: fn(Vec2) -> Option<T>,
+    pub(crate) event_trigger: fn(Vec2) -> bool,
     pub(crate) x_state: ValueState,
     pub(crate) y_state: ValueState,
     pub(crate) x_mock: Option<f32>,
     pub(crate) y_mock: Option<f32>,
 }
-impl<T> DualValueBinding<T> {
+impl DualValueBinding {
     /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
@@ -753,10 +757,14 @@ impl<T> DualValueBinding<T> {
     /// Feeds the internal states for each axis a new value.
     ///
     /// This is what the `inlet` system calls to update the state of a binding. You shouldn't need to call this.
-    pub fn feed(&mut self, value: Vec2) -> Option<T> {
+    pub fn feed(&mut self, value: Vec2) -> Option<Duration> {
         self.x_state.feed(value.x);
         self.y_state.feed(value.y);
-        (self.event)(self.value())
+        if (self.event_trigger)(self.value()) {
+            Some(self.x_state.last_transition.elapsed())
+        } else {
+            None
+        }
     }
     /// Most recent axis value feed into internal state.
     pub fn value(&self) -> Vec2 {
@@ -770,8 +778,8 @@ impl<T> DualValueBinding<T> {
         self.y_mod_stack.push(modifier);
         self
     }
-    pub fn with_event(mut self, event: fn(Vec2) -> Option<T>) -> Self {
-        self.event = event;
+    pub fn with_event(mut self, event_trigger: fn(Vec2) -> bool) -> Self {
+        self.event_trigger = event_trigger;
         self
     }
     pub fn from_binding(x: AxisBinding, y: AxisBinding) -> Self {
@@ -780,7 +788,7 @@ impl<T> DualValueBinding<T> {
             y_bindings: vec![y],
             x_mod_stack: vec![],
             y_mod_stack: vec![],
-            event: no_event_dual,
+            event_trigger: no_event_dual,
             x_state: ValueState::default(),
             y_state: ValueState::default(),
             x_mock: None,
@@ -793,7 +801,7 @@ impl<T> DualValueBinding<T> {
             y_bindings: y,
             x_mod_stack: vec![],
             y_mod_stack: vec![],
-            event: no_event_dual,
+            event_trigger: no_event_dual,
             x_state: ValueState::default(),
             y_state: ValueState::default(),
             x_mock: None,
@@ -818,18 +826,18 @@ impl<T> DualValueBinding<T> {
     }
 }
 
-impl<T> From<(AxisBinding, AxisBinding)> for DualValueBinding<T> {
+impl From<(AxisBinding, AxisBinding)> for DualValueBinding {
     fn from((x, y): (AxisBinding, AxisBinding)) -> Self {
         Self::from_binding(x, y)
     }
 }
 
-impl<T> From<(Vec<AxisBinding>, Vec<AxisBinding>)> for DualValueBinding<T> {
+impl From<(Vec<AxisBinding>, Vec<AxisBinding>)> for DualValueBinding {
     fn from((x, y): (Vec<AxisBinding>, Vec<AxisBinding>)) -> Self {
         Self::from_bindings(x, y)
     }
 }
 
-fn no_event_dual<T>(_: Vec2) -> Option<T> {
-    None
+fn no_event_dual(_: Vec2) -> bool {
+    false
 }

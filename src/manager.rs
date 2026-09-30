@@ -109,9 +109,9 @@ impl Default for InputHandler {
     }
 }
 
-/// Disables a InputManger with types `T` and `K`.
+/// Disables a InputManger with types `T`.
 #[derive(Debug, Default, Component)]
-pub struct DisableInputManager<K, T>(PhantomData<T>, PhantomData<K>);
+pub struct DisableInputManager<K>(PhantomData<K>);
 
 #[derive(PartialEq, Eq)]
 enum Outy {
@@ -197,7 +197,7 @@ impl InputHandler {
         self.frame += 1;
     }
     /// Updates the internal binding map and resets all states.
-    pub fn update_list<K, T>(&mut self, map: &HashMap<K, InputBinding<T>>) {
+    pub fn update_list<K>(&mut self, map: &HashMap<K, InputBinding>) {
         let clashables: Vec<BevyInputKind> =
             map.values().flat_map(|asdf| asdf.input_kinds()).collect();
         // TODO need to provide a way to clean up unused inputs.

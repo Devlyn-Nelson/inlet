@@ -46,7 +46,7 @@ impl GenericActionsMessage {
 #[test]
 fn test_fn() {
     // Create a new bindings. All of the `register_` function call below could be done using `with_` equivalents.
-    let mut bindings = InputBindings::<GenericActions, GenericActionsMessage>::new();
+    let mut bindings = InputBindings::<GenericActions>::new();
     // Bindings live in an enum that can be any type of binding but these functions are nicer to use.
     //
     // A simple button activated action that sends a `GenericActionsMessage::Jump` Message.
@@ -54,7 +54,7 @@ fn test_fn() {
         GenericActions::Jump,
         ActionBinding::new(
             vec![GamepadButton::South.into()],
-            ButtonEventBinding::when_pressed(GenericActionsMessage::jump),
+            ButtonEventBinding::when_pressed(),
         ),
     );
     // Single axis that does not send any Message
@@ -63,15 +63,12 @@ fn test_fn() {
         AxisBinding::gamepad_axis(GamepadAxis::RightZ).into(),
     );
 
-    let dvb: DualValueBinding<GenericActionsMessage> = (
+    let dvb: DualValueBinding = (
         AxisBinding::gamepad_right_stick_x(),
         AxisBinding::gamepad_right_stick_y(),
     )
         .into();
-    bindings.register_dual_value_binding(
-        GenericActions::Move,
-        dvb.with_event(GenericActionsMessage::move_player),
-    );
+    bindings.register_dual_value_binding(GenericActions::Move, dvb.with_event(|_v| true));
 
     // Use may notice not checks for the type of input exist.
     assert!(bindings.get_action_state(&GenericActions::Jump).released());

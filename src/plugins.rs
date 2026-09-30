@@ -2,54 +2,72 @@ use std::{hash::Hash, marker::PhantomData};
 
 use bevy::{
     app::{Plugin, PreUpdate},
-    ecs::schedule::IntoScheduleConfigs,
+    ecs::{
+        lifecycle::Add,
+        observer::On,
+        schedule::IntoScheduleConfigs,
+        system::{Commands, Query},
+    },
     input::InputSystems,
 };
 
-use crate::{BindEvent, SimpleMessage, systems::system_gather_button_inputs};
-
-/// [`InputManagementPlugin`] where the [`Message`](bevy::prelude::Message) type is already filled with a
-/// placeholder for cases where the input manager will not be emitting input events for [`SimpleMessage`]
-/// is good enough for you.
-pub type InputManagementPluginSimple<K> = InputManagementPlugin<K, SimpleMessage>;
+use crate::{InletEvent, InputBindings, PlayerIndex, systems::system_gather_button_inputs};
 
 pub trait InputKey: Hash + Eq + Clone {}
 
 impl<T> InputKey for T where T: Hash + Eq + Clone {}
 
 /// Plugin required for [`InputBindings`](crate::InputBindings) to function.
-pub struct InputManagementPlugin<K, I>(PhantomData<K>, PhantomData<I>);
-impl<K, I> Plugin for InputManagementPlugin<K, I>
+pub struct InputManagementPlugin<K>(PhantomData<K>);
+impl<K> Plugin for InputManagementPlugin<K>
 where
     K: InputKey + Sync + Send + 'static,
-    I: BindEvent + Sync + Send + 'static,
 {
     fn build(&self, app: &mut bevy::prelude::App) {
         app.add_systems(
             PreUpdate,
-            system_gather_button_inputs::<K, I>.after(InputSystems),
+            system_gather_button_inputs::<K>.after(InputSystems),
         )
-        .add_message::<I>();
+        .add_message::<InletEvent<K>>()
+        .add_observer(observer_player_index_assign::<K>);
     }
 }
 
-impl<K, I> InputManagementPlugin<K, I>
+fn observer_player_index_assign<K: Send + Sync + 'static>(
+    binding: On<Add<InputBindings<K>>>,
+    mut cmds: Commands,
+    indices: Query<&PlayerIndex>,
+) {
+    if !indices.contains(binding.entity) {
+        let mut taken = indices.iter().map(|pi| pi.0).collect::<Vec<usize>>();
+        taken.sort();
+        let mut i = 0;
+        for t in taken {
+            if t == i {
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        cmds.entity(binding.entity).insert(PlayerIndex(i));
+    }
+}
+
+impl<K> InputManagementPlugin<K>
 where
     K: InputKey + Sync + Send + 'static,
-    I: BindEvent + Sync + Send + 'static,
 {
     #[must_use]
     pub fn new() -> Self {
-        Self(PhantomData, PhantomData)
+        Self(PhantomData)
     }
 }
 
-impl<K, I> Default for InputManagementPlugin<K, I>
+impl<K> Default for InputManagementPlugin<K>
 where
     K: InputKey + Sync + Send + 'static,
-    I: BindEvent + Sync + Send + 'static,
 {
     fn default() -> Self {
-        InputManagementPlugin::<K, I>::new()
+        InputManagementPlugin::<K>::new()
     }
 }

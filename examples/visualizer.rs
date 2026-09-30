@@ -3,7 +3,7 @@ use std::time::Duration;
 use bevy::{color::palettes::basic, prelude::*};
 use inlet::{
     ClashSettings, ClashStrategy, ComboInterruptSettings, ComboProgressionSettings, ComboSettings,
-    InputBindingsSimple, InputManagementPluginSimple,
+    InputBindings, InputManagementPlugin,
     button::{ActionBinding, ButtonChord, ButtonCombo},
 };
 
@@ -14,7 +14,7 @@ const COMBO_TOLERANCE: Duration = Duration::from_millis(500);
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(InputManagementPluginSimple::<InputTypes>::default())
+        .add_plugins(InputManagementPlugin::<InputTypes>::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (update, update_text))
         .run();
@@ -89,7 +89,7 @@ fn setup(
         Camera2d,
         ClashSettings::from(ClashStrategy::Unbuffered),
         ComboSettings::default().with_tolerance(COMBO_TOLERANCE),
-        InputBindingsSimple::<InputTypes>::new()
+        InputBindings::<InputTypes>::new()
             .with_action_binding(InputTypes::ToggleClashStrategy, KeyCode::F1.into())
             .with_action_binding(InputTypes::ToggleChordRegression, KeyCode::F2.into())
             .with_action_binding(InputTypes::ToggleComboInteruptSetting, KeyCode::F3.into())
@@ -282,7 +282,7 @@ fn update(
     mut commands: Commands,
     colors: Option<Res<Colors>>,
     mut player: Single<(
-        &InputBindingsSimple<InputTypes>,
+        &InputBindings<InputTypes>,
         &mut ClashSettings,
         &mut ComboSettings,
     )>,

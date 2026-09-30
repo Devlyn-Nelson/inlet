@@ -539,16 +539,16 @@ impl ActionableState {
 // TODO Add some way to add conditions to the event activation for example should a event happen
 // `while_pressed`, `when_pressed`, `just_pressed`, `when_released`, `while_pressed_for`, `when_pressed_for`,
 // `while_pressed_between`, `when_pressed_between`.
-/// An Action or Button with an [`ActionableState`], one or many [`ButtonBinding`], and a [`ButtonEventBinding<T>`].
-pub struct ActionBinding<T> {
+/// An Action or Button with an [`ActionableState`], one or many [`ButtonBinding`], and a [`ButtonEventBinding`].
+pub struct ActionBinding {
     pub(crate) bindings: Vec<ButtonBinding>,
-    pub(crate) event: ButtonEventBinding<T>,
+    pub(crate) event: ButtonEventBinding,
     pub(crate) state: ButtonState,
     pub(crate) mocked: bool,
     auto_hold: Option<Duration>,
 }
 
-impl<T> ActionBinding<T> {
+impl ActionBinding {
     /// Returns all possible [`BevyInputKind`] that are associated with this input.
     pub fn input_kinds(&self) -> Vec<BevyInputKind> {
         let mut out = Vec::default();
@@ -602,7 +602,7 @@ impl<T> ActionBinding<T> {
     pub fn released(&self) -> bool {
         self.state.released()
     }
-    pub fn new(bindings: Vec<ButtonBinding>, event: ButtonEventBinding<T>) -> Self {
+    pub fn new(bindings: Vec<ButtonBinding>, event: ButtonEventBinding) -> Self {
         Self {
             bindings,
             event,
@@ -626,7 +626,7 @@ impl<T> ActionBinding<T> {
     }
 
     /// Feeds the state of the binding and returns a `T` if configured to do so for the current state.
-    pub fn feed(&mut self, pressed: bool) -> Option<T> {
+    pub fn feed(&mut self, pressed: bool) -> Option<Duration> {
         let pressed = if let Some(hold) = self.auto_hold
             && self.state.kind().is_pressed()
             && self.state.start.elapsed() < hold
@@ -636,7 +636,11 @@ impl<T> ActionBinding<T> {
             pressed
         };
         if self.state.feed(pressed) {
-            self.event.try_get_event(&self.state)
+            if self.event.try_get_event(&self.state) {
+                Some(self.state.start.elapsed())
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -653,55 +657,55 @@ impl<T> ActionBinding<T> {
     }
 }
 
-impl<T> From<(ButtonBinding, ButtonEventBinding<T>)> for ActionBinding<T> {
-    fn from(value: (ButtonBinding, ButtonEventBinding<T>)) -> Self {
+impl From<(ButtonBinding, ButtonEventBinding)> for ActionBinding {
+    fn from(value: (ButtonBinding, ButtonEventBinding)) -> Self {
         ActionBinding::new(vec![value.0], value.1)
     }
 }
 
-impl<T> From<ButtonBinding> for ActionBinding<T> {
+impl From<ButtonBinding> for ActionBinding {
     fn from(value: ButtonBinding) -> Self {
         ActionBinding::new_no_event(vec![value])
     }
 }
 
-impl<T> From<KeyCode> for ActionBinding<T> {
+impl From<KeyCode> for ActionBinding {
     fn from(value: KeyCode) -> Self {
         ActionBinding::new_no_event(vec![ButtonBinding::Single(value.into())])
     }
 }
 
-impl<T> From<MouseButton> for ActionBinding<T> {
+impl From<MouseButton> for ActionBinding {
     fn from(value: MouseButton) -> Self {
         ActionBinding::new_no_event(vec![ButtonBinding::Single(value.into())])
     }
 }
 
-impl<T> From<GamepadButton> for ActionBinding<T> {
+impl From<GamepadButton> for ActionBinding {
     fn from(value: GamepadButton) -> Self {
         ActionBinding::new_no_event(vec![ButtonBinding::Single(value.into())])
     }
 }
 
-impl<T> From<Vec<ButtonBinding>> for ActionBinding<T> {
+impl From<Vec<ButtonBinding>> for ActionBinding {
     fn from(value: Vec<ButtonBinding>) -> Self {
         ActionBinding::new_no_event(value)
     }
 }
 
-impl<T> From<(Vec<ButtonBinding>, ButtonEventBinding<T>)> for ActionBinding<T> {
-    fn from(value: (Vec<ButtonBinding>, ButtonEventBinding<T>)) -> Self {
+impl From<(Vec<ButtonBinding>, ButtonEventBinding)> for ActionBinding {
+    fn from(value: (Vec<ButtonBinding>, ButtonEventBinding)) -> Self {
         ActionBinding::new(value.0, value.1)
     }
 }
 
-impl<T> From<ButtonChord> for ActionBinding<T> {
+impl From<ButtonChord> for ActionBinding {
     fn from(value: ButtonChord) -> Self {
         ActionBinding::new_no_event(vec![ButtonBinding::Chord(value)])
     }
 }
 
-impl<T> From<ButtonCombo> for ActionBinding<T> {
+impl From<ButtonCombo> for ActionBinding {
     fn from(value: ButtonCombo) -> Self {
         ActionBinding::new_no_event(vec![ButtonBinding::Combo(value)])
     }
@@ -709,112 +713,83 @@ impl<T> From<ButtonCombo> for ActionBinding<T> {
 
 /// Conditionals for a [`ActionBinding`] to emit a [`Message`](bevy::prelude::Message).
 #[derive(Clone)]
-pub enum ButtonEventBinding<T> {
+pub enum ButtonEventBinding {
     /// When the state transitions to `JustPressed`.
-    WhenPressed(fn() -> T),
+    WhenPressed,
     /// While the state is `Pressed`.
-    WhilePressed(fn() -> T),
+    WhilePressed,
     /// When the state is `Pressed` for a duration.
-    WhenPressedFor(Duration, fn() -> T, bool),
+    WhenPressedFor(Duration, bool),
     /// While the state is `Pressed` for a duration.
-    WhilePressedFor(Duration, fn() -> T),
+    WhilePressedFor(Duration),
     /// While the state is `Pressed` for a duration between `start` sand `stop`.
-    PressedRange {
-        start: Duration,
-        end: Duration,
-        event: fn() -> T,
-    },
+    PressedRange { start: Duration, end: Duration },
     /// Passes the [`Duration`] the state has been Pressed into your function allowing you to optionally return
     /// a [`Message`](bevy::prelude::Message) if you want it sent.
-    CapturePressDuration(fn(Duration) -> Option<T>),
+    CapturePressDuration,
     /// When the state transitions to `JustReleased`.
-    WhenReleased(fn() -> T),
+    WhenReleased,
     /// While the state is `Released`.
-    WhileReleased(fn() -> T),
+    WhileReleased,
     /// Never send messages
     None,
 }
 
-impl<T> ButtonEventBinding<T> {
+impl ButtonEventBinding {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
-    pub fn try_get_event(&mut self, state: &ButtonState) -> Option<T> {
+    pub fn try_get_event(&mut self, state: &ButtonState) -> bool {
         match self {
-            ButtonEventBinding::WhenPressed(event) => {
-                if state.just_pressed() {
-                    return Some(event());
-                }
-            }
-            ButtonEventBinding::WhilePressed(event) => {
-                if state.pressed() {
-                    return Some(event());
-                }
-            }
-            ButtonEventBinding::WhenPressedFor(duration, event, activated) => {
-                if state.held_for(duration) {
+            ButtonEventBinding::WhenPressed => state.just_pressed(),
+            ButtonEventBinding::WhilePressed => state.pressed(),
+            ButtonEventBinding::WhenPressedFor(duration, activated) => {
+                if *activated {
+                    false
+                } else if state.held_for(duration) {
                     if !*activated {
                         *activated = true;
-                        return Some(event());
                     }
-                } else if *activated {
-                    *activated = false;
+                    true
+                } else {
+                    false
                 }
             }
-            ButtonEventBinding::WhilePressedFor(duration, event) => {
-                if state.held_for(duration) {
-                    return Some(event());
-                }
+            ButtonEventBinding::WhilePressedFor(duration) => state.held_for(duration),
+            ButtonEventBinding::PressedRange { start, end } => state.held_range(start, end),
+            ButtonEventBinding::CapturePressDuration => {
+                matches!(state.kind, ActionableState::Pressed)
             }
-            ButtonEventBinding::PressedRange { start, end, event } => {
-                if state.held_range(start, end) {
-                    return Some(event());
-                }
-            }
-            ButtonEventBinding::CapturePressDuration(event) => {
-                if let Some(dur) = state.try_get_held_duration() {
-                    return event(dur);
-                }
-            }
-            ButtonEventBinding::WhenReleased(event) => {
-                if state.just_released() {
-                    return Some(event());
-                }
-            }
-            ButtonEventBinding::WhileReleased(event) => {
-                if state.released() {
-                    return Some(event());
-                }
-            }
-            ButtonEventBinding::None => {}
+            ButtonEventBinding::WhenReleased => state.just_released(),
+            ButtonEventBinding::WhileReleased => state.released(),
+            ButtonEventBinding::None => false,
         }
-        None
     }
     pub fn none() -> Self {
         Self::None
     }
-    pub fn when_pressed(event: fn() -> T) -> Self {
-        Self::WhenPressed(event)
+    pub fn when_pressed() -> Self {
+        Self::WhenPressed
     }
-    pub fn while_pressed(event: fn() -> T) -> Self {
-        Self::WhilePressed(event)
+    pub fn while_pressed() -> Self {
+        Self::WhilePressed
     }
-    pub fn when_released(event: fn() -> T) -> Self {
-        Self::WhenReleased(event)
+    pub fn when_released() -> Self {
+        Self::WhenReleased
     }
-    pub fn while_released(event: fn() -> T) -> Self {
-        Self::WhileReleased(event)
+    pub fn while_released() -> Self {
+        Self::WhileReleased
     }
-    pub fn when_pressed_for(event: fn() -> T, duration: Duration) -> Self {
-        Self::WhenPressedFor(duration, event, false)
+    pub fn when_pressed_for(duration: Duration) -> Self {
+        Self::WhenPressedFor(duration, false)
     }
-    pub fn while_pressed_for(event: fn() -> T, duration: Duration) -> Self {
-        Self::WhilePressedFor(duration, event)
+    pub fn while_pressed_for(duration: Duration) -> Self {
+        Self::WhilePressedFor(duration)
     }
-    pub fn pressed_range(event: fn() -> T, start: Duration, end: Duration) -> Self {
-        Self::PressedRange { start, end, event }
+    pub fn pressed_range(start: Duration, end: Duration) -> Self {
+        Self::PressedRange { start, end }
     }
-    pub fn capture_press_duration(event: fn(Duration) -> Option<T>) -> Self {
-        Self::CapturePressDuration(event)
+    pub fn capture_press_duration() -> Self {
+        Self::CapturePressDuration
     }
 }

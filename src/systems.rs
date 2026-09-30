@@ -10,8 +10,9 @@ use bevy::{
 };
 
 use crate::{
-    BindEvent, ClashSettings, ComboInterruptSettings, ComboProgressionSettings, ComboSettings,
-    DefaultClashSettings, DefaultComboSettings, InputBindings, InputValue,
+    ClashSettings, ComboInterruptSettings, ComboProgressionSettings, ComboSettings,
+    DefaultClashSettings, DefaultComboSettings, InletEvent, InputBindings, InputValue, PlayerIndex,
+    TriggerValue,
     axis::{AxisBinding, AxisBindingKind},
     button::{ButtonBinding, ButtonCombo},
     manager::{DisableInputManager, InputHandler},
@@ -70,18 +71,19 @@ fn expected_is_pressed(
     }
 }
 
-pub fn system_gather_button_inputs<K, T>(
+pub fn system_gather_button_inputs<K>(
     mut commands: Commands,
-    mut writer: MessageWriter<T>,
+    mut writer: MessageWriter<InletEvent<K>>,
     mut bindings: Query<
         (
             Entity,
-            &mut InputBindings<K, T>,
+            &mut InputBindings<K>,
             Option<&mut InputHandler>,
             Option<&ClashSettings>,
             Option<&ComboSettings>,
+            Option<&PlayerIndex>,
         ),
-        Without<DisableInputManager<K, T>>,
+        Without<DisableInputManager<K>>,
     >,
     gamepad_query: Query<&Gamepad>,
     default_clash_settings: Option<Res<DefaultClashSettings>>,
@@ -92,7 +94,6 @@ pub fn system_gather_button_inputs<K, T>(
     accumulated_mouse_scroll: Res<AccumulatedMouseScroll>,
 ) where
     K: InputKey + Send + Sync + 'static,
-    T: BindEvent + 'static,
 {
     let default_combo_settings: ComboSettings = if let Some(d) = default_combo_settings {
         **d
@@ -105,7 +106,7 @@ pub fn system_gather_button_inputs<K, T>(
         ClashSettings::default()
     };
     let players = bindings.count();
-    for (entity, mut bindings, mut input_handler, clash_settings, combo_settings) in
+    for (entity, mut bindings, mut input_handler, clash_settings, combo_settings, player_index) in
         bindings.iter_mut()
     {
         let combo_settings = combo_settings.unwrap_or_else(|| &default_combo_settings);
@@ -184,8 +185,15 @@ pub fn system_gather_button_inputs<K, T>(
                         }
                     }
                     if re.is_empty() {
-                        if let Some(event) = action_binding.feed(pressed) {
-                            writer.write(event);
+                        if let Some(duration) = action_binding.feed(pressed)
+                            && let Some(pi) = player_index
+                        {
+                            writer.write(InletEvent {
+                                player: **pi,
+                                kind: key.clone(),
+                                data: TriggerValue::Pressed(pressed),
+                                duration,
+                            });
                         }
                     } else {
                         repoll.push(Repoll {
@@ -205,8 +213,15 @@ pub fn system_gather_button_inputs<K, T>(
                         value_binding.mock,
                     ) {
                         Ok(v) => {
-                            if let Some(event) = value_binding.feed(v) {
-                                writer.write(event);
+                            if let Some(duration) = value_binding.feed(v)
+                                && let Some(pi) = player_index
+                            {
+                                writer.write(InletEvent {
+                                    player: **pi,
+                                    kind: key.clone(),
+                                    data: TriggerValue::Value(v),
+                                    duration,
+                                });
                             }
                         }
                         Err((value, re)) => repoll.push(Repoll {
@@ -235,8 +250,15 @@ pub fn system_gather_button_inputs<K, T>(
                     match (x, y) {
                         (Ok(x), Ok(y)) => {
                             let v = Vec2::new(x, y);
-                            if let Some(event) = dual_value_binding.feed(v) {
-                                writer.write(event);
+                            if let Some(duration) = dual_value_binding.feed(v)
+                                && let Some(pi) = player_index
+                            {
+                                writer.write(InletEvent {
+                                    player: **pi,
+                                    kind: key.clone(),
+                                    data: TriggerValue::DualValue(v),
+                                    duration,
+                                });
                             }
                         }
                         (Err((x, x_i)), Err((y, y_i))) => {
@@ -323,8 +345,15 @@ pub fn system_gather_button_inputs<K, T>(
                                 }
                             };
                         }
-                        if let Some(event) = action_binding.feed(pressed) {
-                            writer.write(event);
+                        if let Some(duration) = action_binding.feed(pressed)
+                            && let Some(pi) = player_index
+                        {
+                            writer.write(InletEvent {
+                                player: **pi,
+                                kind: r.key.clone(),
+                                data: TriggerValue::Pressed(pressed),
+                                duration,
+                            });
                         }
                     }
                     crate::InputBinding::Value(value_binding) => {
@@ -334,8 +363,15 @@ pub fn system_gather_button_inputs<K, T>(
                             r.x.get_value(),
                             input_handler,
                         );
-                        if let Some(event) = value_binding.feed(v) {
-                            writer.write(event);
+                        if let Some(duration) = value_binding.feed(v)
+                            && let Some(pi) = player_index
+                        {
+                            writer.write(InletEvent {
+                                player: **pi,
+                                kind: r.key.clone(),
+                                data: TriggerValue::Value(v),
+                                duration,
+                            });
                         }
                     }
                     crate::InputBinding::DualValue(dual_value_binding) => {
@@ -351,8 +387,16 @@ pub fn system_gather_button_inputs<K, T>(
                             r.y.get_value(),
                             input_handler,
                         );
-                        if let Some(event) = dual_value_binding.feed(Vec2 { x, y }) {
-                            writer.write(event);
+                        let v = Vec2 { x, y };
+                        if let Some(duration) = dual_value_binding.feed(v)
+                            && let Some(pi) = player_index
+                        {
+                            writer.write(InletEvent {
+                                player: **pi,
+                                kind: r.key.clone(),
+                                data: TriggerValue::DualValue(v),
+                                duration,
+                            });
                         }
                     }
                 }

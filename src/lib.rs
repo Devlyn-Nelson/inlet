@@ -123,10 +123,14 @@ mod plugins;
 mod settings;
 mod systems;
 
-use std::hash::Hash;
+use std::{
+    hash::Hash,
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 use button::ActionBinding;
-pub use plugins::{InputManagementPlugin, InputManagementPluginSimple};
+pub use plugins::InputManagementPlugin;
 pub use settings::*;
 
 use bevy::{
@@ -144,12 +148,6 @@ use crate::{
     axis::{DualValueBinding, MouseAxis, ValueBinding},
     button::ButtonState,
 };
-
-/// `inlet` trait for describing [`Message`] events, currently only requires [`Message`] to be auto-implemented.
-/// This type only exists to make it easier for me if a add requirements later.
-pub trait BindEvent: Message {}
-
-impl<T> BindEvent for T where T: Message {}
 
 /// A value from any input.
 #[derive(Debug, Clone)]
@@ -310,18 +308,14 @@ impl From<MouseButton> for BevyInputKind {
     }
 }
 
-/// Simple [`Message`] type used by [`InputManagementPluginSimple`].
-#[derive(Debug, Message)]
-pub struct SimpleMessage;
-
 /// Generic binding for an input.
-pub enum InputBinding<T> {
-    Action(ActionBinding<T>),
-    Value(ValueBinding<T>),
-    DualValue(DualValueBinding<T>),
+pub enum InputBinding {
+    Action(ActionBinding),
+    Value(ValueBinding),
+    DualValue(DualValueBinding),
 }
 
-impl<T> InputBinding<T> {
+impl InputBinding {
     /// Sets the binding to have a pressed value by default.
     pub fn mock_press(&mut self, pressed: bool) {
         match self {
@@ -511,33 +505,27 @@ pub fn pressed_to_value(pressed: bool) -> f32 {
     if pressed { 1.0 } else { 0.0 }
 }
 
-/// Map actions `K` to an [`InputBinding<T>`] without a custom [`Message`] type. Also tracks the assigned
-/// [`Gamepads`](bevy::prelude::Gamepad).
-pub type InputBindingsSimple<K> = InputBindings<K, SimpleMessage>;
-
-/// Map actions `K` to an [`InputBinding<T>`] where `T` is a [`Message`]. Also tracks the assigned
+/// Map actions `K` to an [`InputBinding`]. Also tracks the assigned
 /// [`Gamepads`](bevy::prelude::Gamepad).
 #[derive(Component)]
-pub struct InputBindings<K, T: BindEvent> {
-    pub(crate) bindings: HashMap<K, InputBinding<T>>,
+pub struct InputBindings<K> {
+    pub(crate) bindings: HashMap<K, InputBinding>,
     pub(crate) assigned_gamepad: Option<Entity>,
     pub(crate) changed: bool,
 }
 
-impl<K, T> Default for InputBindings<K, T>
+impl<K> Default for InputBindings<K>
 where
     K: Eq + Hash,
-    T: BindEvent,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, T> InputBindings<K, T>
+impl<K> InputBindings<K>
 where
     K: Eq + Hash,
-    T: BindEvent,
 {
     /// Returns a new blank instance.
     pub fn new() -> Self {
@@ -552,11 +540,8 @@ where
     pub(crate) fn changed(&mut self) -> bool {
         std::mem::take(&mut self.changed)
     }
-    pub fn register_binding(
-        &mut self,
-        name: K,
-        bindings: InputBinding<T>,
-    ) -> Option<InputBinding<T>> {
+
+    pub fn register_binding(&mut self, name: K, bindings: InputBinding) -> Option<InputBinding> {
         self.changed = true;
         self.bindings.insert(name, bindings)
     }
@@ -564,43 +549,43 @@ where
     pub fn register_action_binding(
         &mut self,
         name: K,
-        bindings: ActionBinding<T>,
-    ) -> Option<InputBinding<T>> {
+        bindings: ActionBinding,
+    ) -> Option<InputBinding> {
         self.register_binding(name, InputBinding::Action(bindings))
     }
     /// Map an action to a [`InputBinding::Value`].
     pub fn register_value_binding(
         &mut self,
         name: K,
-        bindings: ValueBinding<T>,
-    ) -> Option<InputBinding<T>> {
+        bindings: ValueBinding,
+    ) -> Option<InputBinding> {
         self.register_binding(name, InputBinding::Value(bindings))
     }
     /// Map an action to a [`InputBinding::DualValue`].
     pub fn register_dual_value_binding(
         &mut self,
         name: K,
-        bindings: DualValueBinding<T>,
-    ) -> Option<InputBinding<T>> {
+        bindings: DualValueBinding,
+    ) -> Option<InputBinding> {
         self.register_binding(name, InputBinding::DualValue(bindings))
     }
     /// Builder style function for mapping an action to a [`InputBinding::Action`].
-    pub fn with_action_binding(mut self, name: K, bindings: ActionBinding<T>) -> Self {
+    pub fn with_action_binding(mut self, name: K, bindings: ActionBinding) -> Self {
         self.register_action_binding(name, bindings);
         self
     }
     /// Builder style function for mapping an action to a [`InputBinding::Value`].
-    pub fn with_value_binding(mut self, name: K, bindings: ValueBinding<T>) -> Self {
+    pub fn with_value_binding(mut self, name: K, bindings: ValueBinding) -> Self {
         self.register_value_binding(name, bindings);
         self
     }
     /// Builder style function for mapping an action to a [`InputBinding::DualValue`].
-    pub fn with_dual_value_binding(mut self, name: K, bindings: DualValueBinding<T>) -> Self {
+    pub fn with_dual_value_binding(mut self, name: K, bindings: DualValueBinding) -> Self {
         self.register_dual_value_binding(name, bindings);
         self
     }
     /// Returns mapped [`InputBinding`] for key `K`.
-    pub fn get_binding(&self, name: &K) -> Option<&InputBinding<T>> {
+    pub fn get_binding(&self, name: &K) -> Option<&InputBinding> {
         self.bindings.get(name)
     }
     /// Returns a [`ButtonState`] that describes the state if the [`InputBinding`] mapped to key `K`.
@@ -653,4 +638,48 @@ where
             .map(|binding| binding.dual_value())
             .unwrap_or_default()
     }
+}
+
+/// If a player index is not provided, an observer will automatically assign
+/// the lowest available number.
+///
+/// If you remove the `PlayerIndex` component from an entity, the entity will no longer emit `Messages`.
+#[derive(Debug, Component, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct PlayerIndex(pub usize);
+
+impl Deref for PlayerIndex {
+    type Target = usize;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for PlayerIndex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[derive(Message)]
+pub struct InletEvent<T> {
+    /// The `PlayerIndex` of the player who triggered the event.
+    pub player: usize,
+    /// The event kind.
+    pub kind: T,
+    /// The value of the input at the time of triggering the event.
+    pub data: TriggerValue,
+    /// How long the input was active before triggering the event.
+    pub duration: Duration,
+}
+
+/// A value from any input.
+#[derive(Debug, Clone)]
+pub enum TriggerValue {
+    /// Input was a button.
+    Pressed(bool),
+    /// Input was a axis.
+    Value(f32),
+    /// Input was a dual axis.
+    DualValue(Vec2),
 }

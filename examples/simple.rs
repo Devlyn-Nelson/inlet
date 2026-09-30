@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use inlet::{
-    InputBindings, InputManagementPlugin,
+    InletEvent, InputBindings, InputManagementPlugin,
     axis::AxisBinding,
     button::{BevyAxisButton, ButtonChord, ButtonCombo, ButtonEventBinding},
 };
@@ -10,7 +10,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // Add the plugin, if you are not using [`Message`] types use [`SimpleInputManagementPlugin`]
         // instead because it only need the InputType.
-        .add_plugins(InputManagementPlugin::<InputTypes, Cheats>::default())
+        .add_plugins(InputManagementPlugin::<InputTypes>::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (gravity, control_player, accept_events))
         .run();
@@ -24,24 +24,6 @@ enum InputTypes {
     Jump,
     SecretAbility1,
     SecretAbility2,
-}
-
-/// These are all of the different messages that need to be sent on conditions being met.
-///
-/// This is not required if you are only using poll-style inputs.
-#[derive(Message)]
-enum Cheats {
-    Grow,
-    Shrink,
-}
-
-impl Cheats {
-    pub fn grow() -> Self {
-        Self::Grow
-    }
-    pub fn shrink() -> Self {
-        Self::Shrink
-    }
 }
 
 /// set up a simple 3D scene
@@ -62,7 +44,7 @@ fn setup(
         //
         // If you are using [`SimpleInputManagementPlugin`] because you don't using messages
         // use [`SimpleInputBindings`] here instead.
-        InputBindings::<InputTypes, Cheats>::new()
+        InputBindings::<InputTypes>::new()
             // register a jump binding that triggers when either the space key or south on a gamepad is pressed.
             .with_action_binding(
                 InputTypes::Jump,
@@ -124,7 +106,7 @@ fn setup(
                         ])
                         .into(),
                     ],
-                    ButtonEventBinding::WhenPressed(Cheats::grow),
+                    ButtonEventBinding::WhenPressed,
                 )
                     .into(),
             )
@@ -147,7 +129,7 @@ fn setup(
                         ])
                         .into(),
                     ],
-                    ButtonEventBinding::WhenPressed(Cheats::shrink),
+                    ButtonEventBinding::WhenPressed,
                 )
                     .into(),
             ),
@@ -172,11 +154,8 @@ fn setup(
 
 fn control_player(
     time: Res<Time>,
-    mut player: Single<(&mut Transform, &InputBindings<InputTypes, Cheats>)>,
-    mut camera: Single<
-        &mut Transform,
-        (With<Camera3d>, Without<InputBindings<InputTypes, Cheats>>),
-    >,
+    mut player: Single<(&mut Transform, &InputBindings<InputTypes>)>,
+    mut camera: Single<&mut Transform, (With<Camera3d>, Without<InputBindings<InputTypes>>)>,
 ) {
     let delta_time = time.delta_secs();
     let mover = player.1.get_dual_value(&InputTypes::Move);
@@ -199,21 +178,19 @@ fn control_player(
 }
 
 fn accept_events(
-    mut cheats: MessageReader<Cheats>,
-    mut player: Single<&mut Transform, With<InputBindings<InputTypes, Cheats>>>,
+    mut cheats: MessageReader<InletEvent<InputTypes>>,
+    mut player: Single<&mut Transform, With<InputBindings<InputTypes>>>,
 ) {
     for cheat in cheats.read() {
-        match cheat {
-            Cheats::Grow => player.scale += 1.,
-            Cheats::Shrink => player.scale -= 1.,
+        match cheat.kind {
+            InputTypes::SecretAbility1 => player.scale += 1.,
+            InputTypes::SecretAbility2 => player.scale -= 1.,
+            _ => {}
         }
     }
 }
 
-fn gravity(
-    time: Res<Time>,
-    mut player: Single<&mut Transform, With<InputBindings<InputTypes, Cheats>>>,
-) {
+fn gravity(time: Res<Time>, mut player: Single<&mut Transform, With<InputBindings<InputTypes>>>) {
     let delta_time = time.delta_secs();
     let ground_y = player.scale.y * 0.5;
     let new = player.translation.y - (18. * delta_time * delta_time);
